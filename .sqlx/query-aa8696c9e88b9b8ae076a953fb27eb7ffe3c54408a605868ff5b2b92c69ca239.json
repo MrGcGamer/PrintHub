@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE spools SET remaining_grams = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "aa8696c9e88b9b8ae076a953fb27eb7ffe3c54408a605868ff5b2b92c69ca239"
+}

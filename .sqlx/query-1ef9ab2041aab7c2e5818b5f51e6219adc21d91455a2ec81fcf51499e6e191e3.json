@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE spools SET material = ?, brand = ?, color_name = ?, color_hex = ?, owner_id = ?,\n                           price_cents = ?, initial_grams = ?, notes = ?\n         WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "1ef9ab2041aab7c2e5818b5f51e6219adc21d91455a2ec81fcf51499e6e191e3"
+}

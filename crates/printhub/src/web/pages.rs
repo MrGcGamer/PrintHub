@@ -30,7 +30,8 @@ pub async fn dashboard(
     State(state): State<AppState>,
     current: CurrentUser,
 ) -> Result<Response, AppError> {
-    let card = PrinterCard::new(&state.printer.snapshot(), &current.user);
+    let bindings = state.bindings.borrow().clone();
+    let card = PrinterCard::new(&state.printer.snapshot(), &current.user, &bindings);
     let page = DashboardPage {
         user: Some(current.user),
         card,

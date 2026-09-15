@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT canvas_id, tray_id, spool_id FROM tray_bindings ORDER BY canvas_id, tray_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "canvas_id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tray_bindings",
+            "name": "canvas_id"
+          }
+        }
+      },
+      {
+        "name": "tray_id",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tray_bindings",
+            "name": "tray_id"
+          }
+        }
+      },
+      {
+        "name": "spool_id",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tray_bindings",
+            "name": "spool_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "aaace75000d9a3a38424bd8c800eaa18b1d32b86f5870b73276fd43bf1afa191"
+}

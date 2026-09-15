@@ -3,6 +3,7 @@
 mod admin;
 mod assets;
 mod error;
+mod filament;
 mod guard;
 mod live;
 mod pages;
@@ -16,7 +17,10 @@ use axum::{
     Router, middleware,
     routing::{get, post},
 };
-use tokio::net::TcpListener;
+use tokio::{
+    net::TcpListener,
+    sync::{Mutex, watch},
+};
 
 pub use error::AppError;
 
@@ -24,7 +28,9 @@ use crate::{
     accounts::{self, Role},
     auth::{self, LoginLimiter},
     camera::{self, CameraHub},
+    cc2::LinkState,
     config::Config,
+    inventory::{self, Binding, InventoryError},
     printer::PrinterLink,
     store::{self, Db},
 };
@@ -42,6 +48,11 @@ pub struct Shared {
     pub printer: PrinterLink,
     pub camera: Option<CameraHub>,
     pub limiter: LoginLimiter,
+    /// Every tray binding with its spool, so the printer card needs no query per status update.
+    pub bindings: watch::Sender<Vec<Binding>>,
+    /// Serialises reloads of `bindings`, so a slow reload cannot publish an older read over a
+    /// newer one.
+    bindings_reload: Mutex<()>,
 }
 
 impl Deref for AppState {
@@ -53,14 +64,38 @@ impl Deref for AppState {
 }
 
 impl AppState {
-    pub fn new(db: Db, config: Config, printer: PrinterLink, camera: Option<CameraHub>) -> Self {
-        Self(Arc::new(Shared {
+    pub async fn new(
+        db: Db,
+        config: Config,
+        printer: PrinterLink,
+        camera: Option<CameraHub>,
+    ) -> anyhow::Result<Self> {
+        let bindings = inventory::bindings(&db)
+            .await
+            .context("loading tray bindings")?;
+        Ok(Self(Arc::new(Shared {
             db,
             config,
             printer,
             camera,
             limiter: LoginLimiter::default(),
-        }))
+            bindings: watch::Sender::new(bindings),
+            bindings_reload: Mutex::new(()),
+        })))
+    }
+
+    /// Call after every change to spools or bindings.
+    pub async fn refresh_bindings(&self) -> Result<(), InventoryError> {
+        let _reload = self.bindings_reload.lock().await;
+        let bindings = inventory::bindings(&self.db).await?;
+        self.bindings.send_if_modified(|current| {
+            let changed = *current != bindings;
+            if changed {
+                *current = bindings;
+            }
+            changed
+        });
+        Ok(())
     }
 }
 
@@ -81,6 +116,19 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/users/{id}/reset", post(admin::reset_link))
         .route("/admin/invites", post(admin::create_invite))
         .route("/admin/invites/{id}/revoke", post(admin::revoke_invite))
+        .route("/inventory", get(filament::inventory_page))
+        .route("/spools", post(filament::create_spool))
+        .route("/spools/new", get(filament::new_spool_page))
+        .route(
+            "/spools/{id}",
+            get(filament::spool_page).post(filament::update_spool),
+        )
+        .route("/spools/{id}/edit", get(filament::edit_spool_page))
+        .route("/spools/{id}/archived", post(filament::set_archived))
+        .route("/spools/{id}/weigh", post(filament::weigh_in))
+        .route("/trays/refresh", post(filament::refresh_trays))
+        .route("/trays/{canvas}/{tray}/bind", post(filament::bind_tray))
+        .route("/trays/{canvas}/{tray}/unbind", post(filament::unbind_tray))
         .route("/events/printer", get(live::printer_events))
         .route("/printer/{action}", post(live::control))
         .route("/camera/stream", get(live::camera_stream))
@@ -115,7 +163,9 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
     tokio::spawn(purge_expired(db.clone()));
 
     let listen = config.listen_addr;
-    let app = router(AppState::new(db, config, printer, camera));
+    let state = AppState::new(db, config, printer, camera).await?;
+    tokio::spawn(unbind_emptied_trays(state.clone()));
+    let app = router(state);
     let listener = TcpListener::bind(listen)
         .await
         .with_context(|| format!("listening on {listen}"))?;
@@ -140,6 +190,36 @@ pub fn camera_url(config: &Config) -> String {
         host.clone()
     };
     format!("http://{host}:{}/", config.printer_camera_port)
+}
+
+/// Drops the binding of every tray the printer reports empty, so a spool that was taken out
+/// does not stay listed as loaded. Runs for the life of the printer link.
+pub async fn unbind_emptied_trays(state: AppState) {
+    let mut printer = state.printer.subscribe();
+    loop {
+        let emptied = {
+            let snapshot = printer.borrow_and_update();
+            match (&snapshot.link, &snapshot.canvas) {
+                (LinkState::Registered, Some(canvas)) => {
+                    inventory::emptied_bindings(canvas, &state.bindings.borrow())
+                }
+                _ => Vec::new(),
+            }
+        };
+        if !emptied.is_empty() {
+            let unbound = async {
+                inventory::unbind_trays(&state.db, &emptied).await?;
+                state.refresh_bindings().await
+            };
+            match unbound.await {
+                Ok(()) => tracing::info!(trays = ?emptied, "unbound spools from emptied trays"),
+                Err(err) => tracing::warn!(%err, "unbinding emptied trays failed"),
+            }
+        }
+        if printer.changed().await.is_err() {
+            return;
+        }
+    }
 }
 
 async fn bootstrap_admin(db: &Db, config: &Config) -> anyhow::Result<()> {

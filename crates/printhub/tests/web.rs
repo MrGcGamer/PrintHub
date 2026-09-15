@@ -11,8 +11,9 @@ use printhub::{
     camera::CameraHub,
     cc2::{ClientConfig, PrinterClient, Timing},
     config::Config,
+    inventory,
     printer::PrinterLink,
-    store,
+    store::{self, Db},
     web::{self, AppState},
 };
 use reqwest::{
@@ -22,12 +23,14 @@ use reqwest::{
 use tokio::{net::TcpListener, time::timeout};
 
 const ADMIN_PASSWORD: &str = "admin-password";
+const MEMBER_PASSWORD: &str = "member-password";
 const WAIT: Duration = Duration::from_secs(10);
 
 struct App {
     base: String,
     http: reqwest::Client,
     printer: FakePrinter,
+    db: Db,
 }
 
 async fn app() -> App {
@@ -60,7 +63,10 @@ async fn app() -> App {
         Duration::from_millis(300),
     );
     let link = PrinterLink::start(&config);
-    let state = AppState::new(db, config, link, Some(camera));
+    let state = AppState::new(db.clone(), config, link, Some(camera))
+        .await
+        .unwrap();
+    tokio::spawn(web::unbind_emptied_trays(state.clone()));
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -74,6 +80,7 @@ async fn app() -> App {
         base,
         http,
         printer,
+        db,
     }
 }
 
@@ -104,6 +111,21 @@ fn session_cookie(response: &reqwest::Response) -> Option<String> {
         .find(|v| v.starts_with("printhub_session=") && !v.starts_with("printhub_session=;"))
         .and_then(|v| v.split(';').next())
         .map(str::to_owned)
+}
+
+fn spool_fields<'a>(
+    material: &'a str,
+    color_name: &'a str,
+    color_hex: &'a str,
+) -> Vec<(&'a str, &'a str)> {
+    vec![
+        ("material", material),
+        ("brand", "Elegoo"),
+        ("color_name", color_name),
+        ("color_hex", color_hex),
+        ("initial_grams", "1000"),
+        ("price", "19,99"),
+    ]
 }
 
 impl App {
@@ -153,6 +175,22 @@ impl App {
         session_cookie(&response).expect("session cookie")
     }
 
+    async fn member(&self, username: &str) -> String {
+        let hash = auth::hash_password(MEMBER_PASSWORD.into()).await.unwrap();
+        accounts::create_user(&self.db, username, &hash, Role::Member, store::now())
+            .await
+            .unwrap();
+        self.login(username, MEMBER_PASSWORD).await
+    }
+
+    /// Adds a spool and returns the path of its page.
+    async fn add_spool(&self, cookie: &str, fields: &[(&str, &str)]) -> String {
+        let response = self.post("/spools", Some(cookie), fields).await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let location = response.headers()[LOCATION].to_str().unwrap();
+        location.split('?').next().unwrap().to_owned()
+    }
+
     /// Reads a streaming response until `needle` appears in what has arrived.
     async fn read_until(response: reqwest::Response, needle: &str) -> String {
         let mut stream = response.bytes_stream();
@@ -190,6 +228,10 @@ async fn anonymous_visitors_are_sent_to_login() {
     assert_eq!(app.get("/healthz", None).await.status(), StatusCode::OK);
     assert_eq!(
         app.get("/events/printer", None).await.status(),
+        StatusCode::SEE_OTHER
+    );
+    assert_eq!(
+        app.get("/inventory", None).await.status(),
         StatusCode::SEE_OTHER
     );
 }
@@ -451,4 +493,153 @@ async fn admin_can_pause_a_running_print() {
         .await
         .unwrap();
     assert!(paused.contains("Pause sent."), "{paused}");
+}
+
+#[tokio::test]
+async fn members_edit_only_their_own_spools() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let sam = app.member("sam").await;
+    let kim = app.member("kim").await;
+
+    let invalid = app
+        .post(
+            "/spools",
+            Some(&sam),
+            &[
+                ("material", " "),
+                ("color_hex", "#000000"),
+                ("initial_grams", "1000"),
+            ],
+        )
+        .await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    let spool = app
+        .add_spool(&sam, &spool_fields("PLA", "Black", "#000000"))
+        .await;
+    let page = app.get(&spool, Some(&kim)).await.text().await.unwrap();
+    assert!(page.contains("Elegoo PLA Black"), "{page}");
+    assert!(page.contains("<dd>sam</dd>"), "sam owns what sam added");
+    assert!(page.contains("19.99"));
+    assert!(!page.contains("/edit"), "kim cannot edit sam's spool");
+
+    let edit = spool_fields("PLA", "Galaxy Black", "#000000");
+    assert_eq!(
+        app.post(&spool, Some(&kim), &edit).await.status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        app.post(
+            &format!("{spool}/archived"),
+            Some(&kim),
+            &[("archived", "true")]
+        )
+        .await
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        app.post(&spool, Some(&admin), &edit).await.status(),
+        StatusCode::SEE_OTHER,
+        "admins edit any spool, and leaving out the owner field keeps the owner"
+    );
+
+    assert_eq!(
+        app.post(&format!("{spool}/weigh"), Some(&kim), &[("grams", "812")])
+            .await
+            .status(),
+        StatusCode::SEE_OTHER,
+        "anyone can weigh in"
+    );
+    let page = app.get(&spool, Some(&sam)).await.text().await.unwrap();
+    assert!(page.contains("Elegoo PLA Galaxy Black"));
+    assert!(page.contains("<dd>sam</dd>"));
+    assert!(page.contains("812 g of 1000 g"), "{page}");
+    assert!(page.contains("188 g used"));
+    assert!(page.contains(&format!(r#"href="{spool}/edit""#)));
+}
+
+#[tokio::test]
+async fn tray_spools_show_on_the_card_and_unbind_when_emptied() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let id_of = |path: &str| path.rsplit('/').next().unwrap().to_owned();
+    let petg = id_of(
+        &app.add_spool(&admin, &spool_fields("PETG", "Red", "#FF0000"))
+            .await,
+    );
+    let pla = id_of(
+        &app.add_spool(&admin, &spool_fields("PLA", "White", "#FFFFFF"))
+            .await,
+    );
+
+    // Tray contents arrive shortly after the app registers with the printer.
+    timeout(WAIT, async {
+        loop {
+            let response = app
+                .post(
+                    "/trays/0/1/bind",
+                    Some(&admin),
+                    &[("spool_id", pla.as_str())],
+                )
+                .await;
+            if response.status() == StatusCode::SEE_OTHER {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("tray A2 accepts a spool");
+    assert_eq!(
+        app.post(
+            "/trays/0/0/bind",
+            Some(&admin),
+            &[("spool_id", petg.as_str())]
+        )
+        .await
+        .status(),
+        StatusCode::SEE_OTHER
+    );
+    assert_eq!(
+        app.post(
+            "/trays/0/3/bind",
+            Some(&admin),
+            &[("spool_id", petg.as_str())]
+        )
+        .await
+        .status(),
+        StatusCode::BAD_REQUEST,
+        "tray A4 is empty"
+    );
+
+    let page = app
+        .get("/inventory", Some(&admin))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(page.contains("Elegoo PETG Red"));
+    assert_eq!(page.matches("Material mismatch").count(), 1, "{page}");
+
+    let response = app.get("/events/printer", Some(&admin)).await;
+    let card = App::read_until(response, "Material mismatch").await;
+    assert!(card.contains("Elegoo PLA White"));
+
+    app.printer.set_tray(1, "", "", 0);
+    let refreshed = app.post("/trays/refresh", Some(&admin), &[]).await;
+    assert_eq!(refreshed.headers()[LOCATION], "/inventory?done=refreshed");
+    timeout(WAIT, async {
+        loop {
+            let bindings = inventory::bindings(&app.db).await.unwrap();
+            if bindings.len() == 1 {
+                return bindings;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .map(|bindings| assert_eq!(bindings[0].spool.material, "PETG"))
+    .expect("the emptied tray loses its spool");
 }

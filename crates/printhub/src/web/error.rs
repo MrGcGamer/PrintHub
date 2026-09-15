@@ -4,7 +4,10 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 
-use crate::accounts::{AccountError, User};
+use crate::{
+    accounts::{AccountError, User},
+    inventory::InventoryError,
+};
 
 #[derive(Debug)]
 pub enum AppError {
@@ -26,6 +29,16 @@ impl From<AccountError> for AppError {
         match err {
             AccountError::NotFound => Self::NotFound,
             AccountError::Db(err) => Self::Internal(err.into()),
+            other => Self::BadRequest(other.to_string()),
+        }
+    }
+}
+
+impl From<InventoryError> for AppError {
+    fn from(err: InventoryError) -> Self {
+        match err {
+            InventoryError::NotFound => Self::NotFound,
+            InventoryError::Db(err) => Self::Internal(err.into()),
             other => Self::BadRequest(other.to_string()),
         }
     }

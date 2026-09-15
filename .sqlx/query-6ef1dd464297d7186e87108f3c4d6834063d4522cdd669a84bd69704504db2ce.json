@@ -1,0 +1,170 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT s.id AS \"id!\", s.material, s.brand, s.color_name, s.color_hex, s.owner_id,\n                  u.username AS \"owner_name?\", s.price_cents, s.initial_grams, s.remaining_grams,\n                  s.notes, s.archived, s.created_at\n           FROM spools s LEFT JOIN users u ON u.id = s.owner_id\n           WHERE s.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "material",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "material"
+          }
+        }
+      },
+      {
+        "name": "brand",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "brand"
+          }
+        }
+      },
+      {
+        "name": "color_name",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "color_name"
+          }
+        }
+      },
+      {
+        "name": "color_hex",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "color_hex"
+          }
+        }
+      },
+      {
+        "name": "owner_id",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "owner_id"
+          }
+        }
+      },
+      {
+        "name": "owner_name?",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "name": "price_cents",
+        "ordinal": 7,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "price_cents"
+          }
+        }
+      },
+      {
+        "name": "initial_grams",
+        "ordinal": 8,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "initial_grams"
+          }
+        }
+      },
+      {
+        "name": "remaining_grams",
+        "ordinal": 9,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "remaining_grams"
+          }
+        }
+      },
+      {
+        "name": "notes",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "notes"
+          }
+        }
+      },
+      {
+        "name": "archived",
+        "ordinal": 11,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "archived"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 12,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6ef1dd464297d7186e87108f3c4d6834063d4522cdd669a84bd69704504db2ce"
+}

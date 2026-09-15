@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO spools (material, brand, color_name, color_hex, owner_id, price_cents,\n                             initial_grams, remaining_grams, notes, created_at)\n         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "3e6514517e64813031277e94da3d8d95301d4b251bbbbf17c91c538e57072874"
+}

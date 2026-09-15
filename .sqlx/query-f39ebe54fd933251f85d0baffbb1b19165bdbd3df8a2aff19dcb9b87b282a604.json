@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT remaining_grams FROM spools WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "remaining_grams",
+        "ordinal": 0,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "remaining_grams"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f39ebe54fd933251f85d0baffbb1b19165bdbd3df8a2aff19dcb9b87b282a604"
+}

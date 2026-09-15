@@ -23,6 +23,11 @@
     <span class="tray-label">{{ tray.label }}</span>
     <span>{{ tray.material }}</span>
     <span class="muted">{{ tray.state }}</span>
+    {% if let Some(spool) = tray.spool %}
+    <a href="/spools/{{ spool.id }}">{{ spool.name }}</a>
+    <span class="muted">{{ spool.remaining }}</span>
+    {% if spool.mismatch %}<span class="badge warn">Material mismatch</span>{% endif %}
+    {% endif %}
   </li>
   {% endfor %}
 </ul>

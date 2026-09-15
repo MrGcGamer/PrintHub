@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ spool.name }} · PrintHub{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="card-head">
+    <h1><svg class="swatch" viewBox="0 0 20 20" width="22" height="22" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="{{ spool.color }}" stroke="currentColor"/></svg> {{ spool.name }}</h1>
+    {% if spool.archived %}<span class="badge warn">Archived</span>{% endif %}
+  </div>
+  {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+  <dl class="facts">
+    <dt>Left</dt><dd>{{ spool.remaining }} of {{ spool.initial }}</dd>
+    <dt>Tray</dt><dd>{{ spool.tray }}</dd>
+    <dt>Owner</dt><dd>{{ spool.owner }}</dd>
+    {% if let Some(price) = spool.price %}<dt>Price</dt><dd>{{ price }}</dd>{% endif %}
+    <dt>Added</dt><dd>{{ spool.added }}</dd>
+    {% if !spool.notes.is_empty() %}<dt>Notes</dt><dd>{{ spool.notes }}</dd>{% endif %}
+  </dl>
+  {% if can_edit %}
+  <div class="controls">
+    <a href="/spools/{{ spool.id }}/edit">Edit</a>
+    <form method="post" action="/spools/{{ spool.id }}/archived">
+      <input type="hidden" name="archived" value="{% if spool.archived %}false{% else %}true{% endif %}">
+      <button class="secondary">{% if spool.archived %}Restore{% else %}Archive{% endif %}</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+<section class="panel">
+  <h2>Weigh in</h2>
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/spools/{{ spool.id }}/weigh" class="inline-form">
+    <label>Filament left (g)
+      <input name="grams" value="{{ weigh_value }}" inputmode="decimal" required>
+    </label>
+    <button>Record</button>
+  </form>
+  <p class="muted">Weigh the spool and subtract the weight of the empty spool.</p>
+  <h2>History</h2>
+  {% if history.is_empty() %}
+  <p class="muted">Nothing recorded yet.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>When</th><th>What</th><th>Change</th><th>By</th></tr></thead>
+    <tbody>
+      {% for entry in history %}
+      <tr><td>{{ entry.when }}</td><td>{{ entry.what }}</td><td>{{ entry.change }}</td><td>{{ entry.who }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

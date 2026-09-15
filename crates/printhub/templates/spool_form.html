@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · PrintHub{% endblock %}
+{% block content %}
+<form method="post" action="{{ action }}" class="panel narrow">
+  <h1>{{ heading }}</h1>
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <label>Material
+    <input name="material" value="{{ form.material }}" list="materials" maxlength="64" autocomplete="off" required>
+  </label>
+  <datalist id="materials">
+    <option value="PLA"><option value="PETG"><option value="ABS"><option value="ASA"><option value="TPU"><option value="PLA-CF"><option value="PETG-CF">
+  </datalist>
+  <label>Brand
+    <input name="brand" value="{{ form.brand }}" maxlength="64">
+  </label>
+  <label>Colour name
+    <input name="color_name" value="{{ form.color_name }}" maxlength="64">
+  </label>
+  <label>Colour
+    <input name="color_hex" type="color" value="{{ form.color_hex }}">
+  </label>
+  <label>Filament on a full spool (g)
+    <input name="initial_grams" value="{{ form.initial_grams }}" inputmode="decimal" required>
+  </label>
+  <label>Price <span class="muted">(optional)</span>
+    <input name="price" value="{{ form.price }}" inputmode="decimal">
+  </label>
+  {% if !owners.is_empty() %}
+  <label>Owner
+    <select name="owner_id">
+      <option value="">Shared</option>
+      {% for owner in owners %}<option value="{{ owner.id }}"{% if owner.selected %} selected{% endif %}>{{ owner.username }}</option>{% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <label>Notes
+    <textarea name="notes" rows="3" maxlength="1000">{{ form.notes }}</textarea>
+  </label>
+  <button type="submit">{{ submit }}</button>
+</form>
+{% endblock %}

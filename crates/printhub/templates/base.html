@@ -14,6 +14,7 @@
 <header class="bar">
   <a href="/" class="brand">PrintHub</a>
   <nav>
+    <a href="/inventory">Filament</a>
     {% if user.is_admin() %}<a href="/admin/users">Users</a>{% endif %}
     <a href="/account">{{ user.username }}</a>
     <form method="post" action="/logout"><button class="link">Log out</button></form>

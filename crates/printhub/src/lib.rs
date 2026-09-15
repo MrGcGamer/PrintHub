@@ -3,6 +3,7 @@ pub mod auth;
 pub mod camera;
 pub mod cc2;
 pub mod config;
+pub mod inventory;
 pub mod printer;
 pub mod probe;
 pub mod store;

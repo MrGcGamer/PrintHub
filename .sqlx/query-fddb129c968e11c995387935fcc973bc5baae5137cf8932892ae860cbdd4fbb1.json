@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM tray_bindings WHERE spool_id = ? OR (canvas_id = ? AND tray_id = ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "fddb129c968e11c995387935fcc973bc5baae5137cf8932892ae860cbdd4fbb1"
+}

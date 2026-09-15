@@ -80,7 +80,7 @@ section h2:not(:first-child) { margin-top: 1.5rem; }
 
 label { display: block; margin: 0 0 0.9rem; font-weight: 600; }
 
-input, select {
+input, select, textarea {
   display: block;
   width: 100%;
   margin-top: 0.3rem;
@@ -143,11 +143,13 @@ progress { width: 100%; height: 0.75rem; accent-color: var(--accent); margin: 0.
 .facts dd { margin: 0; overflow-wrap: anywhere; }
 
 .trays { list-style: none; padding: 0; margin: 0.5rem 0; display: grid; gap: 0.4rem; }
-.trays li { display: flex; align-items: center; gap: 0.5rem; }
+.trays li { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
 .trays li.empty { color: var(--muted); }
 .tray-label { font-weight: 600; min-width: 1.75rem; }
+.swatch { vertical-align: middle; }
 
-.controls { display: flex; gap: 0.5rem; margin-top: 1rem; }
+.controls { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
+.controls form { margin: 0; }
 
 .camera img { display: block; width: 100%; height: auto; border-radius: 8px; background: #000; }
 

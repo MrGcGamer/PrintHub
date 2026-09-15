@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM tray_bindings WHERE canvas_id = ? AND tray_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "bbd45de0aeae9cb61fd0caf7e5e85787d0c3e354ee6e7df35dea413decb899e0"
+}

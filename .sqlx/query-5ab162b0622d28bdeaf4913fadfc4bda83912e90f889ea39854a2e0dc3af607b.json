@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO consumption (spool_id, user_id, kind, grams, note, created_at)\n         VALUES (?, ?, ?, ?, '', ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "5ab162b0622d28bdeaf4913fadfc4bda83912e90f889ea39854a2e0dc3af607b"
+}

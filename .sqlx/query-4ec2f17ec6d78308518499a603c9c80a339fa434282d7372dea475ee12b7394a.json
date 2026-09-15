@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT archived FROM spools WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "archived",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "archived"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4ec2f17ec6d78308518499a603c9c80a339fa434282d7372dea475ee12b7394a"
+}

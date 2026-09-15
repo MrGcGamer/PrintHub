@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO tray_bindings (canvas_id, tray_id, spool_id, bound_at) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "13ab8fec9e6c80a6c4c4894a341ea178f4e647d67c70fb6af16190550b8186dd"
+}

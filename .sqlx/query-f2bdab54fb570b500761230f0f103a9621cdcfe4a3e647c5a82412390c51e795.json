@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM tray_bindings WHERE spool_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "f2bdab54fb570b500761230f0f103a9621cdcfe4a3e647c5a82412390c51e795"
+}

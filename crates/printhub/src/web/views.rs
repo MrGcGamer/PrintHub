@@ -6,6 +6,7 @@ use crate::{
         LinkState, PrinterSnapshot,
         model::{Heater, MachineState, StatusView, TrayState, printing_sub_status as sub},
     },
+    inventory::{self, Binding, Spool},
 };
 
 pub struct PrinterCard {
@@ -25,16 +26,27 @@ pub struct PrinterCard {
 }
 
 pub struct TrayView {
+    pub canvas_id: i64,
+    pub tray_id: i64,
     pub label: String,
     pub material: String,
     /// Always a valid `#RRGGBB`: it is written into an SVG attribute.
     pub color: String,
     pub state: &'static str,
     pub loaded: bool,
+    pub spool: Option<TraySpool>,
+}
+
+pub struct TraySpool {
+    pub id: i64,
+    pub name: String,
+    pub remaining: String,
+    /// The tray reports a material other than the spool's.
+    pub mismatch: bool,
 }
 
 impl PrinterCard {
-    pub fn new(snapshot: &PrinterSnapshot, user: &User) -> Self {
+    pub fn new(snapshot: &PrinterSnapshot, user: &User, bindings: &[Binding]) -> Self {
         let connected = snapshot.link == LinkState::Registered;
         let link = match &snapshot.link {
             LinkState::Registered => "Connected".to_owned(),
@@ -43,7 +55,7 @@ impl PrinterCard {
             LinkState::Rejected(reason) => format!("Refused: {reason}"),
             LinkState::Disconnected(_) => "Disconnected".to_owned(),
         };
-        let trays = trays(snapshot);
+        let trays = trays(snapshot, bindings);
 
         let Some(status) = &snapshot.status else {
             return Self {
@@ -123,7 +135,7 @@ pub fn state_label(status: &StatusView) -> String {
     label.to_owned()
 }
 
-fn trays(snapshot: &PrinterSnapshot) -> Vec<TrayView> {
+pub fn trays(snapshot: &PrinterSnapshot, bindings: &[Binding]) -> Vec<TrayView> {
     let Some(canvas) = &snapshot.canvas else {
         return Vec::new();
     };
@@ -131,16 +143,33 @@ fn trays(snapshot: &PrinterSnapshot) -> Vec<TrayView> {
         .canvas_list
         .iter()
         .flat_map(|unit| {
-            let letter = char::from(b'A' + u8::try_from(unit.canvas_id % 26).unwrap_or(0));
             unit.tray_list.iter().map(move |tray| {
+                let canvas_id = i64::from(unit.canvas_id);
+                let tray_id = i64::from(tray.tray_id);
                 let loaded = tray.has_filament();
                 let name = if tray.filament_name.is_empty() {
                     &tray.filament_type
                 } else {
                     &tray.filament_name
                 };
+                let spool = bindings
+                    .iter()
+                    .find(|binding| binding.canvas_id == canvas_id && binding.tray_id == tray_id)
+                    .map(|binding| TraySpool {
+                        id: binding.spool.id,
+                        name: spool_name(&binding.spool),
+                        remaining: grams(binding.spool.remaining_grams),
+                        mismatch: loaded
+                            && !tray.filament_type.trim().is_empty()
+                            && !inventory::material_matches(
+                                &tray.filament_type,
+                                &binding.spool.material,
+                            ),
+                    });
                 TrayView {
-                    label: format!("{letter}{}", tray.tray_id + 1),
+                    canvas_id,
+                    tray_id,
+                    label: tray_label(canvas_id, tray_id),
                     material: if loaded { name.clone() } else { String::new() },
                     color: safe_color(&tray.filament_color),
                     state: match tray.state() {
@@ -150,13 +179,33 @@ fn trays(snapshot: &PrinterSnapshot) -> Vec<TrayView> {
                         TrayState::Unknown(_) => "unknown",
                     },
                     loaded,
+                    spool,
                 }
             })
         })
         .collect()
 }
 
-fn safe_color(raw: &str) -> String {
+/// `A1` for the first tray of the first CANVAS unit.
+pub fn tray_label(canvas_id: i64, tray_id: i64) -> String {
+    let letter = char::from(b'A' + u8::try_from(canvas_id.rem_euclid(26)).unwrap_or(0));
+    format!("{letter}{}", tray_id + 1)
+}
+
+pub fn spool_name(spool: &Spool) -> String {
+    [&spool.brand, &spool.material, &spool.color_name]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub fn grams(grams: f64) -> String {
+    format!("{grams:.0} g")
+}
+
+pub fn safe_color(raw: &str) -> String {
     let hex = raw.strip_prefix('#').unwrap_or(raw);
     if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
         format!("#{hex}")
@@ -236,5 +285,11 @@ mod tests {
         assert_eq!(safe_color("2850df"), "#2850df");
         assert_eq!(safe_color("\" onload=\"x"), "#888888");
         assert_eq!(safe_color(""), "#888888");
+    }
+
+    #[test]
+    fn tray_labels_letter_the_unit() {
+        assert_eq!(tray_label(0, 0), "A1");
+        assert_eq!(tray_label(1, 3), "B4");
     }
 }
