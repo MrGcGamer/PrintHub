@@ -272,6 +272,50 @@ pub fn machine_name(nozzle: Nozzle) -> String {
     format!("Elegoo Centauri Carbon 2 {} nozzle", nozzle.as_str())
 }
 
+/// The process the upload form preselects: the bundled "Standard" one, whose layer height is
+/// half the nozzle diameter.
+pub fn default_process(nozzle: Nozzle) -> String {
+    let layer = match nozzle {
+        Nozzle::Mm02 => "0.10",
+        Nozzle::Mm04 => "0.20",
+        Nozzle::Mm06 => "0.30",
+        Nozzle::Mm08 => "0.40",
+    };
+    format!("{layer}mm Standard @Elegoo CC2 {} nozzle", nozzle.as_str())
+}
+
+/// An ASCII STL of a cube with `size` mm sides, for `slice-selftest` and the real-slicer test.
+pub fn cube_stl(size: f32) -> String {
+    let v = |i: usize| {
+        let bit = |b: usize| if i >> b & 1 == 1 { size } else { 0.0 };
+        (bit(2), bit(1), bit(0))
+    };
+    let faces = [
+        (0, 1, 3),
+        (0, 3, 2),
+        (4, 6, 7),
+        (4, 7, 5),
+        (0, 4, 5),
+        (0, 5, 1),
+        (2, 3, 7),
+        (2, 7, 6),
+        (0, 2, 6),
+        (0, 6, 4),
+        (1, 5, 7),
+        (1, 7, 3),
+    ];
+    let mut stl = String::from("solid cube\n");
+    for (a, b, c) in faces {
+        stl.push_str(" facet normal 0 0 0\n  outer loop\n");
+        for i in [a, b, c] {
+            let (x, y, z) = v(i);
+            stl.push_str(&format!("   vertex {x} {y} {z}\n"));
+        }
+        stl.push_str("  endloop\n endfacet\n");
+    }
+    stl + "endsolid cube\n"
+}
+
 /// `--load-settings` takes one argument with the files separated by `;`.
 fn join_paths(paths: &[PathBuf]) -> std::ffi::OsString {
     let mut joined = std::ffi::OsString::new();
@@ -585,36 +629,5 @@ mod tests {
             info.tools[0].grams > 1.0,
             "density came through the flattened chain"
         );
-    }
-
-    fn cube_stl(size: f32) -> String {
-        let v = |i: usize| {
-            let bit = |b: usize| if i >> b & 1 == 1 { size } else { 0.0 };
-            (bit(2), bit(1), bit(0))
-        };
-        let faces = [
-            (0, 1, 3),
-            (0, 3, 2),
-            (4, 6, 7),
-            (4, 7, 5),
-            (0, 4, 5),
-            (0, 5, 1),
-            (2, 3, 7),
-            (2, 7, 6),
-            (0, 2, 6),
-            (0, 6, 4),
-            (1, 5, 7),
-            (1, 7, 3),
-        ];
-        let mut stl = String::from("solid cube\n");
-        for (a, b, c) in faces {
-            stl.push_str(" facet normal 0 0 0\n  outer loop\n");
-            for i in [a, b, c] {
-                let (x, y, z) = v(i);
-                stl.push_str(&format!("   vertex {x} {y} {z}\n"));
-            }
-            stl.push_str("  endloop\n endfacet\n");
-        }
-        stl + "endsolid cube\n"
     }
 }

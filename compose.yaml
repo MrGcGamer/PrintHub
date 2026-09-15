@@ -1,0 +1,26 @@
+services:
+  printhub:
+    build: .
+    image: printhub
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PRINTER_HOST: printer-hostname
+      PRINTER_ACCESS_CODE: "123456"
+      TZ: Europe/Berlin
+      # First start only: creates this admin if no user exists yet. Remove afterwards.
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: change-me
+    volumes:
+      - data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  data:

@@ -28,7 +28,7 @@ use crate::{
     inventory::{self, Spool},
     jobs::{self, Job, JobState, NewJob, Source},
     schedule::{self, Rule, RuleKind},
-    slicer::SliceSettings,
+    slicer::{self, SliceSettings},
     store,
 };
 
@@ -170,10 +170,7 @@ async fn new_job_form(
     let field = |name: &str| fields.get(name).map(String::as_str).unwrap_or_default();
     let (processes, filaments) = match &state.slicer {
         Some(slicer) => {
-            let default_process = format!(
-                "0.20mm Standard @Elegoo CC2 {} nozzle",
-                state.config.nozzle.as_str()
-            );
+            let default_process = slicer::default_process(state.config.nozzle);
             let wanted = if field("process").is_empty() {
                 default_process.as_str()
             } else {

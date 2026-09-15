@@ -62,7 +62,30 @@ and `$J` (cookie jar) set; exercise the phase's new routes there with `curl -b $
 Read the printed serve log: a warning or error there is a failure even when every status
 code looked right.
 
-## 4. Report
+## 4. The Docker image
+
+Needed when the `Dockerfile`, `compose.yaml`, startup, or anything the slicer depends on
+changed. This Mac runs Docker through Colima (see `CLEANUP.md`); start it with `colima start`.
+
+```sh
+docker buildx build --platform linux/arm64 -t printhub:arm64 --load . >/tmp/image.log 2>&1; echo "image=$?"
+docker buildx build --platform linux/arm64 --target build -t printhub-build:arm64 --load . >/dev/null 2>&1
+docker compose config >/dev/null; echo "compose=$?"
+docker run --rm --read-only --tmpfs /tmp --cap-drop ALL printhub:arm64 slice-selftest; echo "selftest=$?"
+```
+
+`image-smoke.sh` runs `serve` in the image with compose's hardening against the fake printer,
+uploads an STL and waits for it to be sliced in the container, then checks the Docker
+healthcheck and a clean stop. It needs a Linux `fakeprinter` binary in a volume:
+
+```sh
+docker volume create printhub-smoke-bin
+docker run --rm -v printhub-smoke-bin:/out -w /src printhub-build:arm64 sh -c \
+  'SQLX_OFFLINE=true cargo zigbuild --release --locked -p fakeprinter --target aarch64-unknown-linux-musl && cp target/aarch64-unknown-linux-musl/release/fakeprinter /out/'
+.claude/skills/verify-phase/image-smoke.sh printhub:arm64 printhub-smoke-bin
+```
+
+## 5. Report
 
 The fake printer models the documented protocol, not the real firmware. Say that nothing is
 verified against the real CC2, and add anything the phase depends on that only the printer

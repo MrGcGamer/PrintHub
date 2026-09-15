@@ -1,0 +1,7 @@
+/.env
+/.git
+/.claude
+/target
+/data
+/STATUS.md
+/CLEANUP.md
