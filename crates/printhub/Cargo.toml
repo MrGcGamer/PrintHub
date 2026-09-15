@@ -7,16 +7,24 @@ publish.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+argon2.workspace = true
+askama.workspace = true
+axum.workspace = true
 bytes.workspace = true
 clap.workspace = true
 futures.workspace = true
+getrandom.workspace = true
+jiff.workspace = true
 md-5.workspace = true
 reqwest.workspace = true
 rumqttc.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-stream.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

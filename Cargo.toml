@@ -9,10 +9,14 @@ publish = false
 
 [workspace.dependencies]
 anyhow = "1.0.104"
+argon2 = "0.6.0"
+askama = "0.16.1"
 axum = "0.8.9"
 bytes = "1.12.1"
 clap = { version = "4.6.7", features = ["derive", "env"] }
 futures = "0.3.34"
+getrandom = "0.4.3"
+jiff = "0.2.37"
 md-5 = "0.11.0"
 # Printer endpoints are plain HTTP and MQTT, so both clients are built without TLS.
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "stream"] }
@@ -20,7 +24,10 @@ rumqttc = { version = "0.25.1", default-features = false }
 rumqttd = { version = "0.20.0", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "0.11.0"
+sqlx = { version = "0.9.0", default-features = false, features = ["macros", "migrate", "runtime-tokio", "sqlite-bundled"] }
 thiserror = "2.0.20"
+tokio-stream = { version = "0.1.19", features = ["sync"] }
 tokio = { version = "1.53.1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

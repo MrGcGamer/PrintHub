@@ -78,6 +78,9 @@ pub struct ClientConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", content = "detail", rename_all = "snake_case")]
 pub enum LinkState {
+    /// Set by the server while it looks for the printer's serial number; the client itself
+    /// never reports it.
+    Discovering(String),
     Connecting,
     /// Connected at the MQTT level, but the printer refused registration, e.g. `too many clients`.
     Rejected(String),

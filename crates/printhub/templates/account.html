@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Account · PrintHub{% endblock %}
+{% block content %}
+<form method="post" action="/account/password" class="panel narrow">
+  <h1>Change password</h1>
+  {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if let Some(user) = user %}<input type="text" name="username" value="{{ user.username }}" autocomplete="username" hidden>{% endif %}
+  <label>Current password
+    <input name="current" type="password" autocomplete="current-password" required>
+  </label>
+  <label>New password
+    <input name="password" type="password" autocomplete="new-password" required minlength="10">
+  </label>
+  <label>Repeat new password
+    <input name="confirm" type="password" autocomplete="new-password" required minlength="10">
+  </label>
+  <button type="submit">Change password</button>
+  <p class="muted">Changing it logs out your other devices.</p>
+</form>
+{% endblock %}

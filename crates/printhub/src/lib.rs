@@ -1,4 +1,9 @@
+pub mod accounts;
+pub mod auth;
 pub mod camera;
 pub mod cc2;
 pub mod config;
+pub mod printer;
 pub mod probe;
+pub mod store;
+pub mod web;

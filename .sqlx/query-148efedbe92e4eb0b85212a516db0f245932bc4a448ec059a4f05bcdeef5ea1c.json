@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT i.id AS \"id!\", i.role, i.reset_user, u.username AS \"reset_username?\",\n                  i.created_at, i.expires_at\n           FROM invites i LEFT JOIN users u ON u.id = i.reset_user\n           WHERE i.used_at IS NULL AND i.expires_at > ?\n           ORDER BY i.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "invites",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "role",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "invites",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "name": "reset_user",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "invites",
+            "name": "reset_user"
+          }
+        }
+      },
+      {
+        "name": "reset_username?",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "invites",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "expires_at",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "invites",
+            "name": "expires_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "148efedbe92e4eb0b85212a516db0f245932bc4a448ec059a4f05bcdeef5ea1c"
+}

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ status }} · PrintHub{% endblock %}
+{% block content %}
+<div class="panel narrow">
+  <h1>{{ status }}</h1>
+  <p>{{ message }}</p>
+  <p><a href="/">Back to PrintHub</a></p>
+</div>
+{% endblock %}

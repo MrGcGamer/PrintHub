@@ -1,0 +1,39 @@
+<div class="card-head">
+  <h2>{{ card.state }}</h2>
+  <span class="badge {% if card.connected %}ok{% else %}warn{% endif %}">{{ card.link }}</span>
+</div>
+{% if let Some(progress) = card.progress %}
+<progress max="100" value="{{ progress }}">{{ progress }}%</progress>
+<dl class="facts">
+  <dt>File</dt><dd>{{ card.filename }}</dd>
+  <dt>Progress</dt><dd>{{ progress }}%</dd>
+  {% if let Some(layers) = card.layers %}<dt>Layer</dt><dd>{{ layers }}</dd>{% endif %}
+  {% if let Some(remaining) = card.remaining %}<dt>Remaining</dt><dd>{{ remaining }}</dd>{% endif %}
+</dl>
+{% endif %}
+<dl class="facts">
+  {% if let Some(nozzle) = card.nozzle %}<dt>Nozzle</dt><dd>{{ nozzle }}</dd>{% endif %}
+  {% if let Some(bed) = card.bed %}<dt>Bed</dt><dd>{{ bed }}</dd>{% endif %}
+</dl>
+{% if !card.trays.is_empty() %}
+<ul class="trays">
+  {% for tray in card.trays %}
+  <li class="{% if tray.loaded %}loaded{% else %}empty{% endif %}">
+    <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="{% if tray.loaded %}{{ tray.color }}{% else %}none{% endif %}" stroke="currentColor"/></svg>
+    <span class="tray-label">{{ tray.label }}</span>
+    <span>{{ tray.material }}</span>
+    <span class="muted">{{ tray.state }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% if card.can_control && card.busy %}
+<div class="controls">
+  {% if card.paused %}
+  <button hx-post="/printer/resume" hx-target="#control-result">Resume</button>
+  {% else %}
+  <button hx-post="/printer/pause" hx-target="#control-result">Pause</button>
+  {% endif %}
+  <button class="danger" hx-post="/printer/stop" hx-target="#control-result" hx-confirm="Stop the current print? It cannot be resumed.">Stop</button>
+</div>
+{% endif %}

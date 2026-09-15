@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="htmx-config" content='{"includeIndicatorStyles": false}'>
+<title>{% block title %}PrintHub{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js" defer></script>
+<script src="/static/htmx-ext-sse.min.js" defer></script>
+</head>
+<body>
+{% if let Some(user) = user %}
+<header class="bar">
+  <a href="/" class="brand">PrintHub</a>
+  <nav>
+    {% if user.is_admin() %}<a href="/admin/users">Users</a>{% endif %}
+    <a href="/account">{{ user.username }}</a>
+    <form method="post" action="/logout"><button class="link">Log out</button></form>
+  </nav>
+</header>
+{% endif %}
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

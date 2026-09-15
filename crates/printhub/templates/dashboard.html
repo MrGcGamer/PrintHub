@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid">
+  <section class="panel" aria-live="polite" hx-ext="sse" sse-connect="/events/printer" sse-swap="printer">
+    {% include "printer_card.html" %}
+  </section>
+  <section class="panel camera">
+    {% if camera_enabled %}
+    <img src="/camera/stream" alt="Live view of the printer">
+    <p class="muted"><a href="/camera/snapshot.jpg" target="_blank" rel="noopener">Open a still image</a></p>
+    {% else %}
+    <p class="muted">The camera is turned off.</p>
+    {% endif %}
+  </section>
+</div>
+<div id="control-result" role="status"></div>
+{% endblock %}

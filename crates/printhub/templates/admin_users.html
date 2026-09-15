@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Users · PrintHub{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Users</h1>
+  {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if let Some(link) = link %}
+  <div role="status">
+    <p>{{ link.what }} It works once, expires in 7 days, and is not shown again.</p>
+    <p class="link-box">{{ link.url }}</p>
+  </div>
+  {% endif %}
+  <table>
+    <thead>
+      <tr><th>User</th><th>Role</th><th>Status</th><th>Joined</th><th><span class="visually-hidden">Actions</span></th></tr>
+    </thead>
+    <tbody>
+      {% for row in users %}
+      <tr>
+        <td>{{ row.username }}{% if row.is_me %} <span class="muted">(you)</span>{% endif %}</td>
+        <td>{{ row.role }}</td>
+        <td>{% if row.disabled %}Disabled{% else %}Active{% endif %}</td>
+        <td>{{ row.joined }}</td>
+        <td class="actions">
+          <form method="post" action="/admin/users/{{ row.id }}/role">
+            <input type="hidden" name="role" value="{% if row.is_admin %}member{% else %}admin{% endif %}">
+            <button class="secondary">{% if row.is_admin %}Make member{% else %}Make admin{% endif %}</button>
+          </form>
+          {% if !row.is_me %}
+          <form method="post" action="/admin/users/{{ row.id }}/disabled">
+            <input type="hidden" name="disabled" value="{% if row.disabled %}false{% else %}true{% endif %}">
+            <button class="secondary">{% if row.disabled %}Enable{% else %}Disable{% endif %}</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/admin/users/{{ row.id }}/reset">
+            <button class="secondary">Password reset link</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="panel">
+  <h2>Invite someone</h2>
+  <form method="post" action="/admin/invites" class="inline-form">
+    <label>Role
+      <select name="role"><option value="member">Member</option><option value="admin">Admin</option></select>
+    </label>
+    <button>Create invite link</button>
+  </form>
+  {% if !invites.is_empty() %}
+  <h2>Open links</h2>
+  <table>
+    <thead><tr><th>Link</th><th>Expires</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+      {% for invite in invites %}
+      <tr>
+        <td>{{ invite.kind }}</td>
+        <td>{{ invite.expires }}</td>
+        <td><form method="post" action="/admin/invites/{{ invite.id }}/revoke"><button class="secondary">Revoke</button></form></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

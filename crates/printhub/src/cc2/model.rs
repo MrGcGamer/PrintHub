@@ -112,8 +112,18 @@ impl MachineState {
 /// Sub-status codes within [`MachineState::Printing`]. Several are reused with other meanings
 /// under other machine states (2075 is also "update failed"), so always check the state first.
 pub mod printing_sub_status {
+    pub const EXTRUDER_PREHEATING: i64 = 1045;
+    pub const EXTRUDER_PREHEATING_ALT: i64 = 1096;
+    pub const BED_PREHEATING: i64 = 1405;
+    pub const BED_PREHEATING_ALT: i64 = 1906;
+    pub const HOMING: i64 = 2801;
+    pub const HOMING_COMPLETED: i64 = 2802;
+    pub const AUTO_LEVELING: i64 = 2901;
+    pub const AUTO_LEVELING_COMPLETED: i64 = 2902;
     pub const PRINTING: i64 = 2075;
     pub const COMPLETED: i64 = 2077;
+    pub const RESUMING: i64 = 2401;
+    pub const RESUMING_COMPLETED: i64 = 2402;
     pub const PAUSING: i64 = 2501;
     pub const PAUSED: i64 = 2502;
     pub const PAUSED_ALT: i64 = 2505;

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE invites SET used_at = ?\n           WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?\n           RETURNING role, reset_user",
+  "describe": {
+    "columns": [
+      {
+        "name": "role",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "invites",
+            "name": "role"
+          }
+        }
+      },
+      {
+        "name": "reset_user",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "invites",
+            "name": "reset_user"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "bb1ea93cea96a9b1c724c53a153b562f3ee3a1b049d853fe659ed226f48b745b"
+}

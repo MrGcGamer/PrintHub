@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{% if reset_username.is_some() %}New password{% else %}Join{% endif %} · PrintHub{% endblock %}
+{% block content %}
+<form method="post" action="/invite/{{ token }}" class="panel narrow">
+  {% if let Some(name) = reset_username %}
+  <h1>New password for {{ name }}</h1>
+  {% else %}
+  <h1>Create your account</h1>
+  <p class="muted">You have been invited to PrintHub.</p>
+  {% endif %}
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if reset_username.is_none() %}
+  <label>Username
+    <input name="username" autocomplete="username" required maxlength="32" value="{{ username }}">
+  </label>
+  {% endif %}
+  <label>Password
+    <input name="password" type="password" autocomplete="new-password" required minlength="10">
+  </label>
+  <label>Repeat password
+    <input name="confirm" type="password" autocomplete="new-password" required minlength="10">
+  </label>
+  <button type="submit">{% if reset_username.is_some() %}Set password{% else %}Create account{% endif %}</button>
+</form>
+{% endblock %}

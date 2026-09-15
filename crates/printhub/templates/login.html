@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Log in · PrintHub{% endblock %}
+{% block content %}
+<form method="post" action="/login" class="panel narrow">
+  <h1>PrintHub</h1>
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <label>Username
+    <input name="username" autocomplete="username" required value="{{ username }}" autofocus>
+  </label>
+  <label>Password
+    <input name="password" type="password" autocomplete="current-password" required>
+  </label>
+  <button type="submit">Log in</button>
+</form>
+{% endblock %}

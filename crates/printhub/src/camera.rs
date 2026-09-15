@@ -1,11 +1,22 @@
 //! The printer camera: an MJPEG stream on port 8080 that serves one viewer at a time.
 
-use std::time::Duration;
+use std::{
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use bytes::{Buf, Bytes, BytesMut};
 use futures::StreamExt;
 use reqwest::header::CONTENT_TYPE;
 use thiserror::Error;
+use tokio::{
+    sync::broadcast,
+    task::JoinHandle,
+    time::{Instant, interval, sleep},
+};
 
 /// Buffered stream data without a complete frame beyond this means the stream is not the
 /// MJPEG it claims to be; the buffer is dropped rather than grown forever.
@@ -148,6 +159,212 @@ pub async fn grab_frame(
     tokio::time::timeout(limit, grab)
         .await
         .map_err(|_| CameraError::Timeout(limit))?
+}
+
+/// How long the upstream connection outlives its last viewer, so a page reload does not cost
+/// a reconnect to a camera that admits one client at a time.
+pub const IDLE_GRACE: Duration = Duration::from_secs(5);
+const RECONNECT_DELAY: Duration = Duration::from_secs(2);
+
+/// Part boundary of the stream served to browsers.
+pub const BOUNDARY: &str = "printhub-frame";
+
+/// Holds the single upstream connection to the camera and fans its frames out to any number
+/// of viewers. The upstream is opened by the first viewer and closed after the last leaves.
+#[derive(Clone)]
+pub struct CameraHub {
+    inner: Arc<HubInner>,
+}
+
+struct HubInner {
+    http: reqwest::Client,
+    url: String,
+    idle_grace: Duration,
+    frames: broadcast::Sender<Bytes>,
+    latest: Mutex<Option<(Bytes, Instant)>>,
+    last_error: Mutex<Option<String>>,
+    viewers: AtomicUsize,
+    upstream: Mutex<Option<JoinHandle<()>>>,
+    upstream_connects: AtomicUsize,
+}
+
+pub struct Viewer {
+    rx: broadcast::Receiver<Bytes>,
+    _guard: ViewerGuard,
+}
+
+struct ViewerGuard(Arc<HubInner>);
+
+impl Drop for ViewerGuard {
+    fn drop(&mut self) {
+        self.0.viewers.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl CameraHub {
+    pub fn new(http: reqwest::Client, url: impl Into<String>, idle_grace: Duration) -> Self {
+        // Viewers only ever want the newest frame; a lagging receiver skips ahead.
+        let (frames, _) = broadcast::channel(2);
+        Self {
+            inner: Arc::new(HubInner {
+                http,
+                url: url.into(),
+                idle_grace,
+                frames,
+                latest: Mutex::default(),
+                last_error: Mutex::default(),
+                viewers: AtomicUsize::new(0),
+                upstream: Mutex::default(),
+                upstream_connects: AtomicUsize::new(0),
+            }),
+        }
+    }
+
+    pub fn watch(&self) -> Viewer {
+        self.inner.viewers.fetch_add(1, Ordering::SeqCst);
+        let guard = ViewerGuard(Arc::clone(&self.inner));
+        let rx = self.inner.frames.subscribe();
+        let mut upstream = self.inner.upstream.lock().unwrap();
+        if upstream.is_none() {
+            *upstream = Some(tokio::spawn(run_upstream(Arc::clone(&self.inner))));
+        }
+        Viewer { rx, _guard: guard }
+    }
+
+    /// The latest frame if it is younger than `max_age`, otherwise the next one to arrive.
+    pub async fn snapshot(&self, max_age: Duration, limit: Duration) -> Result<Bytes, CameraError> {
+        let cached = self
+            .inner
+            .latest
+            .lock()
+            .unwrap()
+            .as_ref()
+            .filter(|(_, at)| at.elapsed() <= max_age)
+            .map(|(frame, _)| frame.clone());
+        if let Some(frame) = cached {
+            return Ok(frame);
+        }
+        let mut viewer = self.watch();
+        match tokio::time::timeout(limit, viewer.next_frame()).await {
+            Ok(Some(frame)) => Ok(frame),
+            Ok(None) => Err(CameraError::Ended),
+            Err(_) => Err(CameraError::Timeout(limit)),
+        }
+    }
+
+    pub fn last_error(&self) -> Option<String> {
+        self.inner.last_error.lock().unwrap().clone()
+    }
+
+    pub fn viewers(&self) -> usize {
+        self.inner.viewers.load(Ordering::SeqCst)
+    }
+
+    pub fn upstream_connects(&self) -> usize {
+        self.inner.upstream_connects.load(Ordering::SeqCst)
+    }
+}
+
+impl Viewer {
+    pub async fn next_frame(&mut self) -> Option<Bytes> {
+        loop {
+            match self.rx.recv().await {
+                Ok(frame) => return Some(frame),
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Closed) => return None,
+            }
+        }
+    }
+}
+
+/// One part of the `multipart/x-mixed-replace` stream served to browsers.
+pub fn multipart_part(frame: &[u8]) -> Bytes {
+    let mut part = format!(
+        "--{BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
+        frame.len()
+    )
+    .into_bytes();
+    part.extend_from_slice(frame);
+    part.extend_from_slice(b"\r\n");
+    Bytes::from(part)
+}
+
+async fn run_upstream(hub: Arc<HubInner>) {
+    let mut idle_since = None;
+    loop {
+        if hub.should_retire(&mut idle_since) {
+            return;
+        }
+        hub.upstream_connects.fetch_add(1, Ordering::SeqCst);
+        match hub.stream_frames(&mut idle_since).await {
+            Ok(()) => return,
+            Err(err) => {
+                tracing::warn!(%err, "camera stream interrupted");
+                *hub.last_error.lock().unwrap() = Some(err.to_string());
+            }
+        }
+        sleep(RECONNECT_DELAY).await;
+    }
+}
+
+impl HubInner {
+    /// Returns `true` once the upstream has had no viewers for the grace period, having
+    /// cleared its slot so the next viewer starts a fresh one. The viewer count is re-read under
+    /// the slot lock: a viewer arriving at that moment either sees the slot still taken and is
+    /// served by this upstream, or sees it empty and starts another.
+    fn should_retire(&self, idle_since: &mut Option<Instant>) -> bool {
+        if self.viewers.load(Ordering::SeqCst) > 0 {
+            *idle_since = None;
+            return false;
+        }
+        if idle_since.get_or_insert_with(Instant::now).elapsed() < self.idle_grace {
+            return false;
+        }
+        let mut upstream = self.upstream.lock().unwrap();
+        if self.viewers.load(Ordering::SeqCst) > 0 {
+            *idle_since = None;
+            return false;
+        }
+        *upstream = None;
+        true
+    }
+
+    /// Streams until retired (`Ok`) or until the connection fails.
+    async fn stream_frames(&self, idle_since: &mut Option<Instant>) -> Result<(), CameraError> {
+        let response = self.http.get(&self.url).send().await?;
+        if !response.status().is_success() {
+            return Err(CameraError::Status(response.status()));
+        }
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+        let mut parser = MjpegParser::from_content_type(&content_type)
+            .ok_or(CameraError::NotMjpeg(content_type))?;
+        let mut stream = response.bytes_stream();
+        let mut check = interval(Duration::from_millis(500));
+        loop {
+            tokio::select! {
+                chunk = stream.next() => {
+                    let Some(chunk) = chunk else {
+                        return Err(CameraError::Ended);
+                    };
+                    for frame in parser.push(&chunk?) {
+                        *self.latest.lock().unwrap() = Some((frame.clone(), Instant::now()));
+                        let _ = self.frames.send(frame);
+                    }
+                    self.last_error.lock().unwrap().take();
+                }
+                _ = check.tick() => {
+                    if self.should_retire(idle_since) {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
