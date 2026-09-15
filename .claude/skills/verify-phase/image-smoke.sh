@@ -25,8 +25,9 @@ remove_containers
 docker volume create printhub-smoke-data >/dev/null
 
 # The fake printer listens on 127.0.0.1 only, so `serve` joins its network namespace, and the
-# web port is published on the printer's container.
-docker run -d --name printhub-smoke-printer -p 127.0.0.1:$PORT:8080 \
+# web port is published on the printer's container. It reuses the image only for the binary,
+# so the image's healthcheck, which needs PRINTER_HOST, is switched off there.
+docker run -d --name printhub-smoke-printer --no-healthcheck -p 127.0.0.1:$PORT:8080 \
   -v "$FP_VOLUME":/fake:ro --entrypoint /fake/fakeprinter "$IMAGE" >/dev/null || exit 1
 for _ in {1..50}; do
   docker logs printhub-smoke-printer 2>/dev/null | grep -q PRINTER_CAMERA_PORT && break

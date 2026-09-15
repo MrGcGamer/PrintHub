@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.nozzle, p.nozzle_changed_at, u.username AS \"username?\"\n           FROM printer_state p LEFT JOIN users u ON u.id = p.nozzle_changed_by\n           WHERE p.id = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "nozzle",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "printer_state",
+            "name": "nozzle"
+          }
+        }
+      },
+      {
+        "name": "nozzle_changed_at",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "printer_state",
+            "name": "nozzle_changed_at"
+          }
+        }
+      },
+      {
+        "name": "username?",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "1cb58e47866559de47c7f1b137a3579aab471f817d8572359c52db0b527cbc02"
+}

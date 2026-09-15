@@ -13,6 +13,7 @@ use crate::{
         model::{MachineState, printing_sub_status as sub},
         upload::UploadError,
     },
+    config::Nozzle,
     gcode,
     inventory::Binding,
     jobs::{self, BlockReason, Job, JobError, JobState, JobTool, StartContext},
@@ -34,6 +35,7 @@ pub struct Readiness {
     snapshot: PrinterSnapshot,
     bindings: Vec<Binding>,
     pub bed_clear: bool,
+    nozzle: Nozzle,
     rules: Vec<Rule>,
     other_job_active: bool,
 }
@@ -52,12 +54,14 @@ impl Readiness {
             .into_iter()
             .map(|(_, rule)| rule)
             .collect();
-        // Taken after the awaits: the watch borrow cannot be held across one.
+        // Taken after the awaits: a watch borrow cannot be held across one.
         let bindings = state.bindings.borrow().clone();
+        let nozzle = state.nozzle.borrow().nozzle;
         Ok(Self {
             snapshot: state.printer.snapshot(),
             bindings,
             bed_clear,
+            nozzle,
             rules,
             other_job_active,
         })
@@ -76,6 +80,7 @@ impl Readiness {
                 snapshot: &self.snapshot,
                 bindings: &self.bindings,
                 bed_clear: self.bed_clear,
+                nozzle: self.nozzle,
                 other_job_active: self.other_job_active,
                 rules: &self.rules,
                 now: Timestamp::now(),

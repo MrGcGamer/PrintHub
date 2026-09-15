@@ -44,6 +44,16 @@ impl GcodeInfo {
     pub fn total_grams(&self) -> f64 {
         self.used_tools().map(|tool| tool.grams).sum()
     }
+
+    /// The nozzle diameter, when the file names one and every extruder has the same.
+    pub fn nozzle_mm(&self) -> Option<f64> {
+        let mut diameters = self
+            .nozzle
+            .split([',', ';'])
+            .map(|diameter| diameter.trim().parse::<f64>().ok());
+        let first = diameters.next()??;
+        diameters.all(|d| d == Some(first)).then_some(first)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -198,6 +208,12 @@ mod tests {
         assert_eq!(info.generator, "OrcaSlicer 2.4.2");
         assert_eq!(info.printer_model, "Elegoo Centauri Carbon 2");
         assert_eq!(info.nozzle, "0.4");
+        assert_eq!(info.nozzle_mm(), Some(0.4));
+        let mixed = GcodeInfo {
+            nozzle: "0.4;0.6".into(),
+            ..info.clone()
+        };
+        assert_eq!(mixed.nozzle_mm(), None);
         assert_eq!(info.estimated_seconds, Some(9 * 60 + 21));
         assert_eq!(info.layers, Some(100));
         assert_eq!(

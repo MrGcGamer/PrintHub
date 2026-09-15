@@ -12,6 +12,7 @@
 </dl>
 {% endif %}
 <dl class="facts">
+  <dt>Nozzle size</dt><dd>{{ card.nozzle_size }} <span class="muted">({{ card.nozzle_note }})</span></dd>
   {% if let Some(nozzle) = card.nozzle %}<dt>Nozzle</dt><dd>{{ nozzle }}</dd>{% endif %}
   {% if let Some(bed) = card.bed %}<dt>Bed</dt><dd>{{ bed }}</dd>{% endif %}
 </dl>

@@ -14,7 +14,7 @@ use super::{
     views::format_time,
 };
 use crate::{
-    accounts::{self, AccountError, Role, User},
+    accounts::{self, AccountError, Permission, Role, User},
     auth, store,
 };
 
@@ -37,6 +37,13 @@ struct UserRow {
     disabled: bool,
     joined: String,
     is_me: bool,
+    permissions: Vec<PermissionBox>,
+}
+
+struct PermissionBox {
+    name: &'static str,
+    label: &'static str,
+    granted: bool,
 }
 
 struct InviteRow {
@@ -64,6 +71,7 @@ fn done_message(code: &str) -> Option<&'static str> {
         "disabled" => Some("Account disabled and logged out everywhere."),
         "enabled" => Some("Account enabled."),
         "revoked" => Some("Link revoked."),
+        "permissions" => Some("Permissions saved."),
         _ => None,
     }
 }
@@ -84,12 +92,21 @@ async fn page(
     error: Option<String>,
 ) -> Result<Response, AppError> {
     let now = store::now();
+    let grants = accounts::grants(&state.db).await?;
     let users = accounts::users(&state.db)
         .await?
         .into_iter()
         .map(|user| UserRow {
             id: user.id,
             is_me: user.id == admin.id,
+            permissions: Permission::ALL
+                .into_iter()
+                .map(|permission| PermissionBox {
+                    name: permission.as_str(),
+                    label: permission.label(),
+                    granted: grants.contains(&(user.id, permission)),
+                })
+                .collect(),
             role: user.role.as_str(),
             is_admin: user.is_admin(),
             disabled: user.disabled,
@@ -153,6 +170,26 @@ pub async fn set_role(
         Err(err) => return Err(err.into()),
     }
     .into_response())
+}
+
+/// The form carries one `permission` field per ticked box; none revokes everything.
+pub async fn set_permissions(
+    State(state): State<AppState>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<i64>,
+    Form(fields): Form<Vec<(String, String)>>,
+) -> Result<Response, AppError> {
+    let mut granted = Vec::new();
+    for (key, value) in &fields {
+        if key == "permission" {
+            granted
+                .push(Permission::parse(value).ok_or_else(|| {
+                    AppError::BadRequest(format!("unknown permission {value:?}"))
+                })?);
+        }
+    }
+    accounts::set_permissions(&state.db, id, &granted, admin.user.id, store::now()).await?;
+    Ok(Redirect::to("/admin/users?done=permissions").into_response())
 }
 
 #[derive(Deserialize)]

@@ -24,6 +24,10 @@ docker compose up -d
   the printer.
 - On first start with no admin, `ADMIN_USERNAME` and `ADMIN_PASSWORD` create one. Remove them
   from `compose.yaml` afterwards; everyone else joins through invite links.
+- The printer does not report its nozzle, so it is recorded on the dashboard. Admins always
+  can; under Users, an admin grants "Record the mounted nozzle" to whoever has the printer at
+  their place. STL uploads are sliced for the recorded nozzle, and a job sliced for another
+  nozzle waits in the queue.
 
 > The container runs as UID 10001 with a read-only root filesystem. `/data` must be writable by
 > that UID; a named volume is, a bind mount has to be `chown`ed first.
@@ -39,7 +43,7 @@ so the session cookie is marked `Secure`, and origin checks and invite links use
 | `PRINTER_HOST` | required | Printer hostname or IP address |
 | `PRINTER_ACCESS_CODE` | `123456` | As set on the printer's touchscreen |
 | `PRINTER_SN` | discovered | Serial number; set it if UDP discovery does not reach the printer |
-| `PRINTER_NOZZLE` | `0.4` | `0.2`, `0.4`, `0.6` or `0.8`; selects the slicer profiles |
+| `PRINTER_NOZZLE` | `0.4` | `0.2`, `0.4`, `0.6` or `0.8`; assumed mounted until someone records the nozzle on the dashboard |
 | `PRINTER_MQTT_PORT` | `1883` | |
 | `PRINTER_UPLOAD_PORT` | `80` | |
 | `PRINTER_CAMERA_PORT` | `8080` | |

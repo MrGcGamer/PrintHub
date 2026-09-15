@@ -139,6 +139,8 @@ pub async fn jobs_page(
 struct NewJobPage {
     user: Option<User>,
     stl_enabled: bool,
+    /// The mounted nozzle, which models are sliced for.
+    nozzle: &'static str,
     max_mb: u64,
     spools: Vec<Choice>,
     processes: Vec<Choice>,
@@ -168,9 +170,10 @@ async fn new_job_form(
     error: Option<String>,
 ) -> Result<Response, AppError> {
     let field = |name: &str| fields.get(name).map(String::as_str).unwrap_or_default();
+    let nozzle = state.nozzle.borrow().nozzle;
     let (processes, filaments) = match &state.slicer {
         Some(slicer) => {
-            let default_process = slicer::default_process(state.config.nozzle);
+            let default_process = slicer::default_process(nozzle);
             let wanted = if field("process").is_empty() {
                 default_process.as_str()
             } else {
@@ -187,8 +190,8 @@ async fn new_job_form(
                     .collect()
             };
             (
-                choices(slicer.processes(), wanted),
-                choices(slicer.filaments(), field("filament")),
+                choices(slicer.processes(nozzle), wanted),
+                choices(slicer.filaments(nozzle), field("filament")),
             )
         }
         None => (Vec::new(), Vec::new()),
@@ -214,6 +217,7 @@ async fn new_job_form(
     let page = NewJobPage {
         user: Some(user),
         stl_enabled: state.slicer.is_some(),
+        nozzle: nozzle.as_str(),
         max_mb: state.config.max_upload_bytes / (1024 * 1024),
         spools,
         processes,
@@ -425,11 +429,13 @@ async fn create_stl_job(
     .filter(|spool| !spool.archived)
     .ok_or_else(|| user_problem("Choose the spool to print with."))?;
 
+    // Read once, so the profiles checked here are the ones the model is sliced with.
+    let nozzle = state.nozzle.borrow().nozzle;
     let process = field("process");
-    if !slicer.processes().iter().any(|name| name == process) {
+    if !slicer.processes(nozzle).iter().any(|name| name == process) {
         return Err(user_problem("Choose a print profile."));
     }
-    let filaments = slicer.filaments();
+    let filaments = slicer.filaments(nozzle);
     let filament = if field("filament").is_empty() {
         default_filament(&filaments, &spool).ok_or_else(|| {
             user_problem(format!(
@@ -463,6 +469,7 @@ async fn create_stl_job(
     let id = jobs::create(&state.db, &new, store::now()).await?;
     place(temp, &jobs::model_path(&state.config.data_dir, id)).await?;
     let settings = SliceSettings {
+        nozzle,
         process: process.to_owned(),
         filament,
         color_hex: spool.color_hex.clone(),
@@ -517,6 +524,7 @@ struct JobView {
     owner: String,
     state: &'static str,
     source: &'static str,
+    sliced_for: Option<String>,
     settings: Option<String>,
     estimate: String,
     error: String,
@@ -643,6 +651,7 @@ async fn job_detail(
             id: job.id,
             owner: owner_name(&job),
             state: job.state.label(),
+            sliced_for: job.nozzle_mm.map(|mm| format!("{mm} mm")),
             source: match job.source {
                 Source::Stl => "Model, sliced here",
                 Source::Gcode => "G-code",

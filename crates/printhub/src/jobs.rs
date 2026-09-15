@@ -15,6 +15,7 @@ use crate::{
         methods::SlotMapEntry,
         model::{MachineState, Tray},
     },
+    config::Nozzle,
     gcode::GcodeInfo,
     inventory::{self, Binding, ConsumptionKind, InventoryError},
     schedule::{self, Rule, ScheduleBlock},
@@ -127,6 +128,8 @@ pub struct Job {
     pub created_at: i64,
     pub started_at: Option<i64>,
     pub finished_at: Option<i64>,
+    /// The nozzle diameter the G-code was sliced for, when it names one.
+    pub nozzle_mm: Option<f64>,
 }
 
 impl Job {
@@ -284,6 +287,7 @@ struct JobRow {
     created_at: i64,
     started_at: Option<i64>,
     finished_at: Option<i64>,
+    nozzle_mm: Option<f64>,
 }
 
 impl From<JobRow> for Job {
@@ -312,6 +316,7 @@ impl From<JobRow> for Job {
             created_at: row.created_at,
             started_at: row.started_at,
             finished_at: row.finished_at,
+            nozzle_mm: row.nozzle_mm,
         }
     }
 }
@@ -322,7 +327,7 @@ pub async fn get(db: &Db, id: i64) -> Result<Option<Job>, JobError> {
         r#"SELECT j.id AS "id!", j.owner_id, u.username AS "owner_name?", j.name, j.source,
                   j.state, j.position, j.process_profile, j.filament_profile, j.supports,
                   j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
-                  j.progress, j.error, j.created_at, j.started_at, j.finished_at
+                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm
            FROM jobs j LEFT JOIN users u ON u.id = j.owner_id
            WHERE j.id = ?"#,
         id,
@@ -339,7 +344,7 @@ pub async fn list(db: &Db, finished: i64) -> Result<Vec<Job>, JobError> {
         r#"SELECT j.id AS "id!", j.owner_id, u.username AS "owner_name?", j.name, j.source,
                   j.state, j.position, j.process_profile, j.filament_profile, j.supports,
                   j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
-                  j.progress, j.error, j.created_at, j.started_at, j.finished_at
+                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm
            FROM jobs j LEFT JOIN users u ON u.id = j.owner_id
            WHERE j.state NOT IN ('done', 'failed', 'cancelled')
               OR j.id IN (SELECT id FROM jobs WHERE state IN ('done', 'failed', 'cancelled')
@@ -364,7 +369,7 @@ pub async fn in_state(db: &Db, state: JobState) -> Result<Vec<Job>, JobError> {
         r#"SELECT j.id AS "id!", j.owner_id, u.username AS "owner_name?", j.name, j.source,
                   j.state, j.position, j.process_profile, j.filament_profile, j.supports,
                   j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
-                  j.progress, j.error, j.created_at, j.started_at, j.finished_at
+                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm
            FROM jobs j LEFT JOIN users u ON u.id = j.owner_id
            WHERE j.state = ?
            ORDER BY j.position, j.id"#,
@@ -397,7 +402,7 @@ pub async fn tools(db: &Db, job_id: i64) -> Result<Vec<JobTool>, JobError> {
         .collect())
 }
 
-/// Records what the G-code needs: the estimate and one row per tool that uses filament. With
+/// Records what the G-code needs: the estimate, its nozzle and one row per tool that uses filament. With
 /// `spool_id`, every tool is assigned that spool, as when the job was sliced for it.
 pub async fn store_gcode_info(
     db: &Db,
@@ -406,10 +411,12 @@ pub async fn store_gcode_info(
     spool_id: Option<i64>,
 ) -> Result<(), JobError> {
     let mut tx = db.begin().await?;
+    let nozzle_mm = info.nozzle_mm();
     sqlx::query!(
-        "UPDATE jobs SET estimated_seconds = ?, layers = ? WHERE id = ?",
+        "UPDATE jobs SET estimated_seconds = ?, layers = ?, nozzle_mm = ? WHERE id = ?",
         info.estimated_seconds,
         info.layers,
+        nozzle_mm,
         job_id,
     )
     .execute(&mut *tx)
@@ -624,6 +631,64 @@ pub async fn set_bed_clear(
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct MountedNozzle {
+    pub nozzle: Nozzle,
+    /// `None` while nobody has recorded one and `PRINTER_NOZZLE` is assumed.
+    pub recorded: Option<NozzleRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NozzleRecord {
+    /// `None` once that account is deleted.
+    pub by: Option<String>,
+    pub at: i64,
+}
+
+pub async fn mounted_nozzle(db: &Db, assumed: Nozzle) -> Result<MountedNozzle, JobError> {
+    let row = sqlx::query!(
+        r#"SELECT p.nozzle, p.nozzle_changed_at, u.username AS "username?"
+           FROM printer_state p LEFT JOIN users u ON u.id = p.nozzle_changed_by
+           WHERE p.id = 1"#
+    )
+    .fetch_one(db)
+    .await?;
+    // The column's CHECK constraint admits only the diameters `Nozzle::parse` knows.
+    let recorded = row.nozzle.as_deref().and_then(Nozzle::parse);
+    Ok(match (recorded, row.nozzle_changed_at) {
+        (Some(nozzle), Some(at)) => MountedNozzle {
+            nozzle,
+            recorded: Some(NozzleRecord {
+                by: row.username,
+                at,
+            }),
+        },
+        _ => MountedNozzle {
+            nozzle: assumed,
+            recorded: None,
+        },
+    })
+}
+
+pub async fn set_mounted_nozzle(
+    db: &Db,
+    nozzle: Nozzle,
+    user_id: i64,
+    now: i64,
+) -> Result<(), JobError> {
+    let nozzle = nozzle.as_str();
+    sqlx::query!(
+        "UPDATE printer_state SET nozzle = ?, nozzle_changed_by = ?, nozzle_changed_at = ?
+         WHERE id = 1",
+        nozzle,
+        user_id,
+        now,
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum BlockReason {
     PrinterOffline,
     AnotherJobActive,
@@ -645,6 +710,10 @@ pub enum BlockReason {
         needed: f64,
         left: f64,
     },
+    NozzleMismatch {
+        sliced_mm: f64,
+        mounted: Nozzle,
+    },
     Schedule(ScheduleBlock),
 }
 
@@ -656,6 +725,10 @@ impl BlockReason {
             Self::AnotherJobActive => "Another job is printing.".into(),
             Self::PrinterBusy => "The printer is busy.".into(),
             Self::BedNotClear => "Nobody has confirmed that the bed is clear.".into(),
+            Self::NozzleMismatch { sliced_mm, mounted } => format!(
+                "It was sliced for a {sliced_mm} mm nozzle, but a {} mm nozzle is mounted.",
+                mounted.as_str()
+            ),
             Self::SpoolNotChosen { tool } => {
                 format!("No spool is chosen for filament {}.", tool + 1)
             }
@@ -701,6 +774,7 @@ pub struct StartContext<'a> {
     pub snapshot: &'a PrinterSnapshot,
     pub bindings: &'a [Binding],
     pub bed_clear: bool,
+    pub nozzle: Nozzle,
     /// A job is already uploading or printing.
     pub other_job_active: bool,
     pub rules: &'a [Rule],
@@ -724,6 +798,15 @@ pub fn check_start(
     }
     if status.machine_status.state() != MachineState::Idle {
         return Err(BlockReason::PrinterBusy);
+    }
+    // Before the bed: clearing the bed does not help a job that needs another nozzle.
+    if let Some(sliced_mm) = job.nozzle_mm
+        && sliced_mm != ctx.nozzle.millimetres()
+    {
+        return Err(BlockReason::NozzleMismatch {
+            sliced_mm,
+            mounted: ctx.nozzle,
+        });
     }
     if !ctx.bed_clear {
         return Err(BlockReason::BedNotClear);
@@ -1131,6 +1214,7 @@ mod tests {
             created_at: 0,
             started_at: None,
             finished_at: None,
+            nozzle_mm: None,
         }
     }
 
@@ -1168,6 +1252,7 @@ mod tests {
             snapshot,
             bindings: &bindings,
             bed_clear,
+            nozzle: Nozzle::Mm04,
             other_job_active,
             rules: &quiet,
             now,
@@ -1199,6 +1284,17 @@ mod tests {
         assert_eq!(
             check(&half_hour, &ok_tools, ctx(&printing, true, false)),
             Err(BlockReason::PrinterBusy)
+        );
+        let for_other_nozzle = Job {
+            nozzle_mm: Some(0.6),
+            ..half_hour.clone()
+        };
+        assert_eq!(
+            check(&for_other_nozzle, &ok_tools, ctx(&idle, false, false)),
+            Err(BlockReason::NozzleMismatch {
+                sliced_mm: 0.6,
+                mounted: Nozzle::Mm04
+            })
         );
         assert_eq!(
             check(&half_hour, &ok_tools, ctx(&idle, false, false)),
@@ -1270,5 +1366,38 @@ mod tests {
             .describe(&tz),
             "Tray A3 for filament 4 is empty."
         );
+    }
+
+    #[tokio::test]
+    async fn the_nozzle_is_assumed_until_recorded_and_jobs_keep_theirs() {
+        let (db, sam) = db_with_user().await;
+        assert_eq!(
+            mounted_nozzle(&db, Nozzle::Mm04).await.unwrap(),
+            MountedNozzle {
+                nozzle: Nozzle::Mm04,
+                recorded: None
+            }
+        );
+        set_mounted_nozzle(&db, Nozzle::Mm06, sam, 50)
+            .await
+            .unwrap();
+        assert_eq!(
+            mounted_nozzle(&db, Nozzle::Mm04).await.unwrap(),
+            MountedNozzle {
+                nozzle: Nozzle::Mm06,
+                recorded: Some(NozzleRecord {
+                    by: Some("sam".into()),
+                    at: 50
+                })
+            }
+        );
+
+        let id = create(&db, &gcode_job(sam), 60).await.unwrap();
+        let sliced = GcodeInfo {
+            nozzle: "0.4".into(),
+            ..info(&[5.0])
+        };
+        store_gcode_info(&db, id, &sliced, None).await.unwrap();
+        assert_eq!(get(&db, id).await.unwrap().unwrap().nozzle_mm, Some(0.4));
     }
 }

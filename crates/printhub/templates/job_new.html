@@ -7,7 +7,7 @@
   <label>File
     <input type="file" name="file" accept="{% if stl_enabled %}.stl,{% endif %}.gcode" required>
   </label>
-  <p class="muted">{% if stl_enabled %}An STL model is sliced here with the settings below. {% endif %}G-code must already be sliced for the Centauri Carbon 2. Up to {{ max_mb }} MB.</p>
+  <p class="muted">{% if stl_enabled %}An STL model is sliced here for the mounted {{ nozzle }} mm nozzle, with the settings below. {% endif %}G-code must already be sliced for the Centauri Carbon 2. Up to {{ max_mb }} MB.</p>
   {% if stl_enabled %}
   <fieldset>
     <legend>Slicing a model</legend>

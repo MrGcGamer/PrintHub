@@ -7,6 +7,7 @@ use crate::{
         model::{Heater, MachineState, StatusView, TrayState, printing_sub_status as sub},
     },
     inventory::{self, Binding, Spool},
+    jobs::MountedNozzle,
 };
 
 pub struct PrinterCard {
@@ -20,6 +21,9 @@ pub struct PrinterCard {
     pub layers: Option<String>,
     pub remaining: Option<String>,
     pub nozzle: Option<String>,
+    /// The mounted nozzle as people recorded it; the printer does not report it.
+    pub nozzle_size: String,
+    pub nozzle_note: String,
     pub bed: Option<String>,
     pub trays: Vec<TrayView>,
     pub can_control: bool,
@@ -46,7 +50,21 @@ pub struct TraySpool {
 }
 
 impl PrinterCard {
-    pub fn new(snapshot: &PrinterSnapshot, user: &User, bindings: &[Binding]) -> Self {
+    pub fn new(
+        snapshot: &PrinterSnapshot,
+        user: &User,
+        bindings: &[Binding],
+        mounted: &MountedNozzle,
+    ) -> Self {
+        let nozzle_size = format!("{} mm", mounted.nozzle.as_str());
+        let nozzle_note = match &mounted.recorded {
+            Some(record) => format!(
+                "recorded by {}, {}",
+                record.by.as_deref().unwrap_or("a deleted user"),
+                format_time(record.at)
+            ),
+            None => "assumed; nobody has recorded it yet".to_owned(),
+        };
         let connected = snapshot.link == LinkState::Registered;
         let link = match &snapshot.link {
             LinkState::Registered => "Connected".to_owned(),
@@ -69,6 +87,8 @@ impl PrinterCard {
                 layers: None,
                 remaining: None,
                 nozzle: None,
+                nozzle_size,
+                nozzle_note,
                 bed: None,
                 trays,
                 can_control: false,
@@ -93,6 +113,8 @@ impl PrinterCard {
             remaining: (busy && print.remaining_time_sec > 0)
                 .then(|| human_duration(print.remaining_time_sec)),
             nozzle: Some(temperature(&status.extruder)),
+            nozzle_size,
+            nozzle_note,
             bed: Some(temperature(&status.heater_bed)),
             trays,
             can_control: connected && user.is_admin(),

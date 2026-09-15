@@ -160,6 +160,7 @@ td form { margin: 0; }
 
 .inline-form { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; }
 .inline-form label { margin: 0; }
+.nozzle-form { margin-top: 1rem; }
 
 .link-box {
   word-break: break-all;

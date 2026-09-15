@@ -80,11 +80,13 @@ async fn slice_selftest(config: &Config) -> anyhow::Result<ExitCode> {
     let slicer = Slicer::new(
         config.orca_slicer.clone(),
         &config.orca_profiles,
-        config.nozzle,
         config.slice_timeout,
     )?;
+    let nozzle = config.nozzle;
+    let machine = slicer::machine_name(nozzle);
     let settings = SliceSettings {
-        process: slicer::default_process(config.nozzle),
+        nozzle,
+        process: slicer::default_process(nozzle),
         filament: "Elegoo PLA @ECC2".into(),
         color_hex: "#2850DF".into(),
         supports: false,
@@ -92,13 +94,12 @@ async fn slice_selftest(config: &Config) -> anyhow::Result<ExitCode> {
     };
     // An incompatible profile otherwise surfaces as a bare exit status from the CLI.
     for (kind, name, compatible) in [
-        ("process", &settings.process, slicer.processes()),
-        ("filament", &settings.filament, slicer.filaments()),
+        ("process", &settings.process, slicer.processes(nozzle)),
+        ("filament", &settings.filament, slicer.filaments(nozzle)),
     ] {
         anyhow::ensure!(
             compatible.contains(name),
-            "no {kind} profile {name:?} for {}",
-            slicer.machine()
+            "no {kind} profile {name:?} for {machine}"
         );
     }
 
@@ -119,8 +120,7 @@ async fn slice_selftest(config: &Config) -> anyhow::Result<ExitCode> {
         "the G-code reports no filament use, so the profiles lost their density"
     );
     println!(
-        "sliced a 20 mm cube for {} with {} and {}: {:.1} g",
-        slicer.machine(),
+        "sliced a 20 mm cube for {machine} with {} and {}: {:.1} g",
         settings.process,
         settings.filament,
         info.total_grams()

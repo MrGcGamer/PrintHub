@@ -13,7 +13,7 @@
   {% endif %}
   <table>
     <thead>
-      <tr><th>User</th><th>Role</th><th>Status</th><th>Joined</th><th><span class="visually-hidden">Actions</span></th></tr>
+      <tr><th>User</th><th>Role</th><th>Status</th><th>Permissions</th><th>Joined</th><th><span class="visually-hidden">Actions</span></th></tr>
     </thead>
     <tbody>
       {% for row in users %}
@@ -21,6 +21,18 @@
         <td>{{ row.username }}{% if row.is_me %} <span class="muted">(you)</span>{% endif %}</td>
         <td>{{ row.role }}</td>
         <td>{% if row.disabled %}Disabled{% else %}Active{% endif %}</td>
+        <td>
+          {% if row.is_admin %}
+          <span class="muted">All, as an admin</span>
+          {% else %}
+          <form method="post" action="/admin/users/{{ row.id }}/permissions" class="inline-form">
+            {% for permission in row.permissions %}
+            <label class="check"><input type="checkbox" name="permission" value="{{ permission.name }}"{% if permission.granted %} checked{% endif %}> {{ permission.label }}</label>
+            {% endfor %}
+            <button class="secondary">Save</button>
+          </form>
+          {% endif %}
+        </td>
         <td>{{ row.joined }}</td>
         <td class="actions">
           <form method="post" action="/admin/users/{{ row.id }}/role">

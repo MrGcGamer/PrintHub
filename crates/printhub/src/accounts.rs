@@ -45,6 +45,35 @@ impl User {
     }
 }
 
+/// A right an admin grants to individual members, such as whoever has the printer at their
+/// place. Admins hold every permission without a grant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Permission {
+    SetNozzle,
+}
+
+impl Permission {
+    pub const ALL: [Self; 1] = [Self::SetNozzle];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SetNozzle => "set_nozzle",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|permission| permission.as_str() == raw)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::SetNozzle => "Record the mounted nozzle",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invite {
     pub id: i64,
@@ -182,6 +211,80 @@ pub async fn users(db: &Db) -> Result<Vec<User>, AccountError> {
         .into_iter()
         .map(|r| user_from(r.id, r.username, &r.role, r.disabled, r.created_at))
         .collect())
+}
+
+pub async fn has_permission(
+    db: &Db,
+    user: &User,
+    permission: Permission,
+) -> Result<bool, AccountError> {
+    if user.is_admin() {
+        return Ok(true);
+    }
+    let name = permission.as_str();
+    let row = sqlx::query!(
+        r#"SELECT COUNT(*) AS "count!: i64" FROM user_permissions
+           WHERE user_id = ? AND permission = ?"#,
+        user.id,
+        name,
+    )
+    .fetch_one(db)
+    .await?;
+    Ok(row.count > 0)
+}
+
+/// Every grant, as `(user_id, permission)`.
+pub async fn grants(db: &Db) -> Result<Vec<(i64, Permission)>, AccountError> {
+    let rows = sqlx::query!("SELECT user_id, permission FROM user_permissions")
+        .fetch_all(db)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| Some((row.user_id, Permission::parse(&row.permission)?)))
+        .collect())
+}
+
+/// Makes `granted` the user's exact set of permissions. A grant that stays keeps its original
+/// grantor and time.
+pub async fn set_permissions(
+    db: &Db,
+    user_id: i64,
+    granted: &[Permission],
+    by: i64,
+    now: i64,
+) -> Result<(), AccountError> {
+    let mut tx = db.begin().await?;
+    let exists = sqlx::query!(r#"SELECT id AS "id!" FROM users WHERE id = ?"#, user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+    if exists.is_none() {
+        return Err(AccountError::NotFound);
+    }
+    for permission in Permission::ALL {
+        let name = permission.as_str();
+        if granted.contains(&permission) {
+            sqlx::query!(
+                "INSERT OR IGNORE INTO user_permissions (user_id, permission, granted_by, granted_at)
+                 VALUES (?, ?, ?, ?)",
+                user_id,
+                name,
+                by,
+                now,
+            )
+            .execute(&mut *tx)
+            .await?;
+        } else {
+            sqlx::query!(
+                "DELETE FROM user_permissions WHERE user_id = ? AND permission = ?",
+                user_id,
+                name,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(())
 }
 
 pub async fn set_role(db: &Db, id: i64, role: Role) -> Result<(), AccountError> {
@@ -608,6 +711,46 @@ mod tests {
         );
         assert_eq!(login_record(&db, "sam").await.unwrap().unwrap().1, "new");
         assert!(session_user(&db, b"s", 21).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn permissions_are_granted_to_members_and_implied_for_admins() {
+        let (db, admin_id) = db_with_admin().await;
+        let admin = user(&db, admin_id).await.unwrap().unwrap();
+        let member_id = create_user(&db, "sam", "h", Role::Member, 1).await.unwrap();
+        let member = user(&db, member_id).await.unwrap().unwrap();
+        let may = |user| {
+            let db = db.clone();
+            async move {
+                has_permission(&db, &user, Permission::SetNozzle)
+                    .await
+                    .unwrap()
+            }
+        };
+
+        assert!(may(admin.clone()).await);
+        assert!(!may(member.clone()).await);
+
+        set_permissions(&db, member_id, &[Permission::SetNozzle], admin_id, 5)
+            .await
+            .unwrap();
+        set_permissions(&db, member_id, &[Permission::SetNozzle], admin_id, 6)
+            .await
+            .unwrap();
+        assert!(may(member.clone()).await);
+        assert_eq!(
+            grants(&db).await.unwrap(),
+            [(member_id, Permission::SetNozzle)]
+        );
+
+        set_permissions(&db, member_id, &[], admin_id, 7)
+            .await
+            .unwrap();
+        assert!(!may(member).await);
+        assert!(matches!(
+            set_permissions(&db, 999, &[], admin_id, 8).await,
+            Err(AccountError::NotFound)
+        ));
     }
 
     #[test]

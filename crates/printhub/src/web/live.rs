@@ -37,9 +37,10 @@ struct Notice<'a> {
     text: &'a str,
 }
 
-/// The printer card, re-rendered when the printer or the tray bindings change, at most twice a
-/// second. Both are watch channels that keep only their newest value, and the card is built
-/// from the newest of each, so throttling drops stale states rather than queueing them.
+/// The printer card, re-rendered when the printer, the tray bindings or the mounted nozzle
+/// change, at most twice a second. All three are watch channels that keep only their newest
+/// value, and the card is built from the newest of each, so throttling drops stale states
+/// rather than queueing them.
 pub async fn printer_events(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -47,14 +48,17 @@ pub async fn printer_events(
     let user = current.user;
     let printer = state.printer.subscribe();
     let bindings = state.bindings.subscribe();
+    let nozzle = state.nozzle.subscribe();
     let changes = WatchStream::new(printer.clone())
         .map(|_| ())
-        .merge(WatchStream::new(bindings.clone()).map(|_| ()));
+        .merge(WatchStream::new(bindings.clone()).map(|_| ()))
+        .merge(WatchStream::new(nozzle.clone()).map(|_| ()));
     let stream = changes.throttle(Duration::from_millis(500)).map(move |()| {
         let snapshot = printer.borrow().clone();
         let bindings = bindings.borrow().clone();
+        let mounted = nozzle.borrow().clone();
         let partial = PrinterCardPartial {
-            card: PrinterCard::new(&snapshot, &user, &bindings),
+            card: PrinterCard::new(&snapshot, &user, &bindings, &mounted),
         };
         let html = partial.render().unwrap_or_else(|err| {
             tracing::error!(%err, "rendering printer card");

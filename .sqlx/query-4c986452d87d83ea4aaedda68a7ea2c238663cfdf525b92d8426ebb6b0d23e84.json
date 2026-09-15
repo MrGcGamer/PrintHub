@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE printer_state SET nozzle = ?, nozzle_changed_by = ?, nozzle_changed_at = ?\n         WHERE id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "4c986452d87d83ea4aaedda68a7ea2c238663cfdf525b92d8426ebb6b0d23e84"
+}

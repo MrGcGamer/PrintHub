@@ -14,8 +14,10 @@ use super::{
     views::PrinterCard,
 };
 use crate::{
-    accounts::{self, AccountError, User},
-    auth, store,
+    accounts::{self, AccountError, Permission, User},
+    auth,
+    config::Nozzle,
+    jobs, store,
 };
 
 #[derive(Template)]
@@ -24,20 +26,66 @@ struct DashboardPage {
     user: Option<User>,
     card: PrinterCard,
     camera_enabled: bool,
+    /// Only for those allowed to record the nozzle.
+    nozzle_choices: Option<Vec<NozzleChoice>>,
+}
+
+struct NozzleChoice {
+    value: &'static str,
+    selected: bool,
 }
 
 pub async fn dashboard(
     State(state): State<AppState>,
     current: CurrentUser,
 ) -> Result<Response, AppError> {
+    let may_record_nozzle =
+        accounts::has_permission(&state.db, &current.user, Permission::SetNozzle).await?;
     let bindings = state.bindings.borrow().clone();
-    let card = PrinterCard::new(&state.printer.snapshot(), &current.user, &bindings);
+    let mounted = state.nozzle.borrow().clone();
+    let card = PrinterCard::new(
+        &state.printer.snapshot(),
+        &current.user,
+        &bindings,
+        &mounted,
+    );
+    let nozzle_choices = may_record_nozzle.then(|| {
+        Nozzle::ALL
+            .into_iter()
+            .map(|nozzle| NozzleChoice {
+                value: nozzle.as_str(),
+                selected: nozzle == mounted.nozzle,
+            })
+            .collect()
+    });
     let page = DashboardPage {
         user: Some(current.user),
         card,
         camera_enabled: state.camera.is_some(),
+        nozzle_choices,
     };
     Ok(render(&page)?.into_response())
+}
+
+#[derive(Deserialize)]
+pub struct NozzleForm {
+    nozzle: String,
+}
+
+pub async fn set_nozzle(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Form(form): Form<NozzleForm>,
+) -> Result<Response, AppError> {
+    if !accounts::has_permission(&state.db, &current.user, Permission::SetNozzle).await? {
+        return Err(AppError::Forbidden);
+    }
+    let nozzle = Nozzle::parse(&form.nozzle)
+        .ok_or_else(|| AppError::BadRequest(format!("unknown nozzle {:?}", form.nozzle)))?;
+    jobs::set_mounted_nozzle(&state.db, nozzle, current.user.id, store::now()).await?;
+    state.refresh_nozzle().await?;
+    tracing::info!(username = %current.user.username, nozzle = nozzle.as_str(), "recorded the mounted nozzle");
+    Ok(Redirect::to("/").into_response())
 }
 
 #[derive(Template)]

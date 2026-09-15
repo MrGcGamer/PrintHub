@@ -16,6 +16,7 @@
     <dt>Owner</dt><dd>{{ job.owner }}</dd>
     <dt>Uploaded</dt><dd>{{ job.created }}</dd>
     <dt>Source</dt><dd>{{ job.source }}</dd>
+    {% if let Some(sliced_for) = job.sliced_for %}<dt>Nozzle</dt><dd>{{ sliced_for }}</dd>{% endif %}
     {% if let Some(settings) = job.settings %}<dt>Settings</dt><dd>{{ settings }}</dd>{% endif %}
     {% if !job.estimate.is_empty() %}<dt>Estimate</dt><dd>{{ job.estimate }}</dd>{% endif %}
     {% if job.printing %}<dt>Progress</dt><dd>{{ job.progress }}%</dd>{% endif %}

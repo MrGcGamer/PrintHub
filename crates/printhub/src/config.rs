@@ -32,7 +32,18 @@ impl Nozzle {
         }
     }
 
-    fn parse(raw: &str) -> Option<Self> {
+    pub const ALL: [Self; 4] = [Self::Mm02, Self::Mm04, Self::Mm06, Self::Mm08];
+
+    pub fn millimetres(self) -> f64 {
+        match self {
+            Self::Mm02 => 0.2,
+            Self::Mm04 => 0.4,
+            Self::Mm06 => 0.6,
+            Self::Mm08 => 0.8,
+        }
+    }
+
+    pub fn parse(raw: &str) -> Option<Self> {
         match raw {
             "0.2" => Some(Self::Mm02),
             "0.4" => Some(Self::Mm04),
@@ -57,6 +68,7 @@ pub struct Config {
     pub printer_mqtt_port: u16,
     pub printer_upload_port: u16,
     pub printer_camera_port: u16,
+    /// Assumed mounted until someone records the nozzle on the dashboard.
     pub nozzle: Nozzle,
     pub listen_addr: SocketAddr,
     pub data_dir: PathBuf,

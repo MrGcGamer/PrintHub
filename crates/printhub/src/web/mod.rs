@@ -35,6 +35,7 @@ use crate::{
     config::Config,
     dispatcher,
     inventory::{self, Binding, InventoryError},
+    jobs::{self, JobError, MountedNozzle},
     printer::PrinterLink,
     slicer::Slicer,
     store::{self, Db},
@@ -65,6 +66,8 @@ pub struct Shared {
     /// Serialises reloads of `bindings`, so a slow reload cannot publish an older read over a
     /// newer one.
     bindings_reload: Mutex<()>,
+    /// The nozzle people recorded as mounted, so the printer card needs no query to show it.
+    pub nozzle: watch::Sender<MountedNozzle>,
     /// Wakes the dispatcher after a change it would otherwise only notice on its next tick.
     pub queue_changed: Notify,
 }
@@ -88,6 +91,9 @@ impl AppState {
         let bindings = inventory::bindings(&db)
             .await
             .context("loading tray bindings")?;
+        let nozzle = jobs::mounted_nozzle(&db, config.nozzle)
+            .await
+            .context("loading the mounted nozzle")?;
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(10))
             .build()?;
@@ -110,6 +116,7 @@ impl AppState {
             limiter: LoginLimiter::default(),
             bindings: watch::Sender::new(bindings),
             bindings_reload: Mutex::new(()),
+            nozzle: watch::Sender::new(nozzle),
             queue_changed: Notify::new(),
         })))
     }
@@ -125,6 +132,15 @@ impl AppState {
             }
             changed
         });
+        Ok(())
+    }
+
+    /// Call after recording a nozzle. Wakes the dispatcher: a job held for another nozzle may
+    /// now fit.
+    pub async fn refresh_nozzle(&self) -> Result<(), JobError> {
+        let nozzle = jobs::mounted_nozzle(&self.db, self.config.nozzle).await?;
+        self.nozzle.send_replace(nozzle);
+        self.queue_changed.notify_one();
         Ok(())
     }
 }
@@ -146,6 +162,10 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/users", get(admin::users_page))
         .route("/admin/users/{id}/role", post(admin::set_role))
         .route("/admin/users/{id}/disabled", post(admin::set_disabled))
+        .route(
+            "/admin/users/{id}/permissions",
+            post(admin::set_permissions),
+        )
         .route("/admin/users/{id}/reset", post(admin::reset_link))
         .route("/admin/invites", post(admin::create_invite))
         .route("/admin/invites/{id}/revoke", post(admin::revoke_invite))
@@ -180,6 +200,7 @@ pub fn router(state: AppState) -> Router {
         .route("/jobs/{id}/requeue", post(queue::requeue_job))
         .route("/jobs/{id}/move", post(queue::move_job))
         .route("/printer/bed-clear", post(queue::mark_bed_clear))
+        .route("/printer/nozzle", post(pages::set_nozzle))
         .route("/events/printer", get(live::printer_events))
         .route("/printer/{action}", post(live::control))
         .route("/camera/stream", get(live::camera_stream))
@@ -246,7 +267,6 @@ fn load_slicer(config: &Config) -> Option<Slicer> {
     match Slicer::new(
         config.orca_slicer.clone(),
         &config.orca_profiles,
-        config.nozzle,
         config.slice_timeout,
     ) {
         Ok(slicer) => Some(slicer),

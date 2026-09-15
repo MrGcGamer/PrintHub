@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO user_permissions (user_id, permission, granted_by, granted_at)\n                 VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "03149e46b6f33bdb94703cfaf132c3e732c6067394c24941f8c34170bd7463be"
+}

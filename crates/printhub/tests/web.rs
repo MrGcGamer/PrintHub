@@ -14,7 +14,7 @@ use printhub::{
     auth,
     camera::CameraHub,
     cc2::{ClientConfig, PrinterClient, Timing},
-    config::{Config, Nozzle},
+    config::Config,
     dispatcher, inventory,
     jobs::{self, JobState},
     printer::PrinterLink,
@@ -861,7 +861,7 @@ fn stub_profiles() -> PathBuf {
 #[tokio::test]
 async fn stl_uploads_are_sliced_for_the_chosen_spool() {
     let binary = stub_slicer();
-    let slicer = Slicer::new(binary.clone(), &stub_profiles(), Nozzle::Mm04, WAIT).unwrap();
+    let slicer = Slicer::new(binary.clone(), &stub_profiles(), WAIT).unwrap();
     let app = app_with(Some(slicer)).await;
     let admin = app.login("admin", ADMIN_PASSWORD).await;
     let sam = app.member("sam").await;
@@ -934,6 +934,64 @@ async fn stl_uploads_are_sliced_for_the_chosen_spool() {
         jobs::get(&app.db, job_id).await.unwrap().unwrap().state,
         JobState::Cancelled
     );
+}
+
+#[tokio::test]
+async fn only_permitted_members_record_the_mounted_nozzle() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let sam = app.member("sam").await;
+    let sam_id = accounts::login_record(&app.db, "sam")
+        .await
+        .unwrap()
+        .unwrap()
+        .0
+        .id;
+    let permissions = format!("/admin/users/{sam_id}/permissions");
+    let record = |cookie: &str, nozzle: &str| {
+        let cookie = cookie.to_owned();
+        let nozzle = nozzle.to_owned();
+        let app = &app;
+        async move {
+            app.post("/printer/nozzle", Some(&cookie), &[("nozzle", &nozzle)])
+                .await
+                .status()
+        }
+    };
+
+    let dashboard = app.get("/", Some(&sam)).await.text().await.unwrap();
+    assert!(dashboard.contains("0.4 mm"), "{dashboard}");
+    assert!(
+        !dashboard.contains("/printer/nozzle"),
+        "no form without the permission"
+    );
+    assert_eq!(record(&sam, "0.6").await, StatusCode::FORBIDDEN);
+
+    assert_eq!(
+        app.post(&permissions, Some(&sam), &[("permission", "set_nozzle")])
+            .await
+            .status(),
+        StatusCode::FORBIDDEN,
+        "members cannot grant themselves"
+    );
+    let granted = app
+        .post(&permissions, Some(&admin), &[("permission", "set_nozzle")])
+        .await;
+    assert_eq!(granted.headers()[LOCATION], "/admin/users?done=permissions");
+    let dashboard = app.get("/", Some(&sam)).await.text().await.unwrap();
+    assert!(dashboard.contains("/printer/nozzle"), "{dashboard}");
+    assert_eq!(record(&sam, "0.6").await, StatusCode::SEE_OTHER);
+    let dashboard = app.get("/", Some(&admin)).await.text().await.unwrap();
+    assert!(dashboard.contains("recorded by sam"), "{dashboard}");
+
+    app.post(&permissions, Some(&admin), &[]).await;
+    assert_eq!(record(&sam, "0.4").await, StatusCode::FORBIDDEN);
+    assert_eq!(
+        record(&admin, "0.8").await,
+        StatusCode::SEE_OTHER,
+        "admins need no grant"
+    );
+    assert_eq!(record(&admin, "0.5").await, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
