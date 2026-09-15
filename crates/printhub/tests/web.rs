@@ -995,6 +995,61 @@ async fn only_permitted_members_record_the_mounted_nozzle() {
 }
 
 #[tokio::test]
+async fn the_spool_list_shows_prices() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    app.add_spool(&admin, &spool_fields("PLA", "Blue", "#2850DF"))
+        .await;
+    let page = app
+        .get("/inventory", Some(&admin))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(page.contains("<td>19.99</td>"), "{page}");
+}
+
+#[tokio::test]
+async fn admins_cannot_be_made_members() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    app.member("sam").await;
+    let users = app
+        .get("/admin/users", Some(&admin))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(!users.contains("Make member"), "{users}");
+    assert!(users.contains("Make admin"), "offered for the member");
+
+    let admin_id = accounts::login_record(&app.db, "admin")
+        .await
+        .unwrap()
+        .unwrap()
+        .0
+        .id;
+    let refused = app
+        .post(
+            &format!("/admin/users/{admin_id}/role"),
+            Some(&admin),
+            &[("role", "member")],
+        )
+        .await;
+    assert_eq!(
+        refused.headers()[LOCATION],
+        "/admin/users?problem=admin-role"
+    );
+    assert!(
+        accounts::user(&app.db, admin_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_admin()
+    );
+}
+
+#[tokio::test]
 async fn print_windows_are_admin_only() {
     let app = app().await;
     let admin = app.login("admin", ADMIN_PASSWORD).await;

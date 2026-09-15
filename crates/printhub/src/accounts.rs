@@ -88,8 +88,10 @@ pub struct Invite {
 pub enum AccountError {
     #[error("that username is taken")]
     UsernameTaken,
-    #[error("the last active admin cannot be demoted or disabled")]
+    #[error("the last active admin cannot be disabled")]
     LastAdmin,
+    #[error("an admin cannot be made a member")]
+    AdminStaysAdmin,
     #[error("this link is invalid, expired or already used")]
     InviteInvalid,
     #[error("no such user")]
@@ -287,11 +289,12 @@ pub async fn set_permissions(
     Ok(())
 }
 
+/// Roles only go up: an admin is never made a member again.
 pub async fn set_role(db: &Db, id: i64, role: Role) -> Result<(), AccountError> {
     let mut tx = db.begin().await?;
     let target = target_for_admin_change(&mut tx, id).await?;
-    if target.is_admin() && !target.disabled && role != Role::Admin {
-        ensure_other_admin(&mut tx).await?;
+    if target.is_admin() && role != Role::Admin {
+        return Err(AccountError::AdminStaysAdmin);
     }
     let role = role.as_str();
     sqlx::query!("UPDATE users SET role = ? WHERE id = ?", role, id)
@@ -587,21 +590,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn last_admin_is_protected() {
+    async fn admins_stay_admins_and_the_last_one_stays_enabled() {
         let (db, admin) = db_with_admin().await;
         assert!(matches!(
             set_role(&db, admin, Role::Member).await,
-            Err(AccountError::LastAdmin)
+            Err(AccountError::AdminStaysAdmin)
         ));
         assert!(matches!(
             set_disabled(&db, admin, true).await,
             Err(AccountError::LastAdmin)
         ));
 
-        let second = create_user(&db, "sam", "h", Role::Admin, 1).await.unwrap();
-        set_role(&db, admin, Role::Member).await.unwrap();
+        let sam = create_user(&db, "sam", "h", Role::Member, 1).await.unwrap();
+        set_role(&db, sam, Role::Admin).await.unwrap();
+        assert!(
+            matches!(
+                set_role(&db, sam, Role::Member).await,
+                Err(AccountError::AdminStaysAdmin)
+            ),
+            "not even while another admin remains"
+        );
+        set_disabled(&db, admin, true).await.unwrap();
         assert!(matches!(
-            set_disabled(&db, second, true).await,
+            set_disabled(&db, sam, true).await,
             Err(AccountError::LastAdmin)
         ));
     }

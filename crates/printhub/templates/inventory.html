@@ -59,7 +59,7 @@
   <p class="muted">No spools yet.</p>
   {% else %}
   <table>
-    <thead><tr><th>Spool</th><th>Owner</th><th>Left</th><th>Tray</th></tr></thead>
+    <thead><tr><th>Spool</th><th>Owner</th><th>Left</th><th>Price</th><th>Tray</th></tr></thead>
     <tbody>
       {% for spool in spools %}
       <tr>
@@ -69,6 +69,7 @@
         </td>
         <td>{{ spool.owner }}</td>
         <td>{{ spool.remaining }} of {{ spool.initial }}</td>
+        <td>{{ spool.price }}</td>
         <td>{{ spool.tray }}</td>
       </tr>
       {% endfor %}

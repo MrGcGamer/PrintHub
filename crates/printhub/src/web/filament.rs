@@ -51,6 +51,8 @@ struct SpoolRow {
     owner: String,
     remaining: String,
     initial: String,
+    /// Empty when no price was entered.
+    price: String,
     tray: String,
     archived: bool,
 }
@@ -113,6 +115,10 @@ pub async fn inventory_page(
             owner: owner_name(spool),
             remaining: views::grams(spool.remaining_grams),
             initial: views::grams(spool.initial_grams),
+            price: spool
+                .price_cents
+                .map(inventory::format_price)
+                .unwrap_or_default(),
             tray: tray_of(&bindings, spool.id).unwrap_or_default(),
             archived: spool.archived,
         })

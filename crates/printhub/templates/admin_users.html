@@ -35,10 +35,12 @@
         </td>
         <td>{{ row.joined }}</td>
         <td class="actions">
+          {% if !row.is_admin %}
           <form method="post" action="/admin/users/{{ row.id }}/role">
-            <input type="hidden" name="role" value="{% if row.is_admin %}member{% else %}admin{% endif %}">
-            <button class="secondary">{% if row.is_admin %}Make member{% else %}Make admin{% endif %}</button>
+            <input type="hidden" name="role" value="admin">
+            <button class="secondary">Make admin</button>
           </form>
+          {% endif %}
           {% if !row.is_me %}
           <form method="post" action="/admin/users/{{ row.id }}/disabled">
             <input type="hidden" name="disabled" value="{% if row.disabled %}false{% else %}true{% endif %}">

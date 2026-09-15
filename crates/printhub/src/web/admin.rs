@@ -78,8 +78,9 @@ fn done_message(code: &str) -> Option<&'static str> {
 
 fn problem_message(code: &str) -> Option<&'static str> {
     match code {
-        "last-admin" => Some("The last active admin cannot be demoted or disabled."),
+        "last-admin" => Some("The last active admin cannot be disabled."),
         "self-disable" => Some("You cannot disable your own account."),
+        "admin-role" => Some("An admin cannot be made a member."),
         _ => None,
     }
 }
@@ -166,7 +167,7 @@ pub async fn set_role(
         .ok_or_else(|| AppError::BadRequest(format!("unknown role {:?}", form.role)))?;
     Ok(match accounts::set_role(&state.db, id, role).await {
         Ok(()) => Redirect::to("/admin/users?done=role"),
-        Err(AccountError::LastAdmin) => Redirect::to("/admin/users?problem=last-admin"),
+        Err(AccountError::AdminStaysAdmin) => Redirect::to("/admin/users?problem=admin-role"),
         Err(err) => return Err(err.into()),
     }
     .into_response())
