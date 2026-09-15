@@ -186,11 +186,7 @@ pub fn trays(snapshot: &PrinterSnapshot, bindings: &[Binding]) -> Vec<TrayView> 
         .collect()
 }
 
-/// `A1` for the first tray of the first CANVAS unit.
-pub fn tray_label(canvas_id: i64, tray_id: i64) -> String {
-    let letter = char::from(b'A' + u8::try_from(canvas_id.rem_euclid(26)).unwrap_or(0));
-    format!("{letter}{}", tray_id + 1)
-}
+pub use crate::inventory::tray_label;
 
 pub fn spool_name(spool: &Spool) -> String {
     [&spool.brand, &spool.material, &spool.color_name]

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Print windows · PrintHub{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Print windows</h1>
+  {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+  <p class="muted">Times are in {{ timezone }}. No job starts inside a deny window. If any allow window exists, jobs start only inside one. A print that is already running is never paused.</p>
+  {% if rules.is_empty() %}
+  <p class="muted">No rules: jobs may start at any time.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Rule</th><th>Days</th><th>Hours</th><th>Must finish first</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+      {% for rule in rules %}
+      <tr>
+        <td>{{ rule.kind }}: {{ rule.label }}</td>
+        <td>{{ rule.days }}</td>
+        <td>{{ rule.hours }}</td>
+        <td>{% if rule.finish %}Yes{% else %}No{% endif %}</td>
+        <td><form method="post" action="/admin/schedule/{{ rule.id }}/delete"><button class="secondary">Delete</button></form></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+<section class="panel">
+  <h2>Add a rule</h2>
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/admin/schedule">
+    <label>Kind
+      <select name="kind">
+        <option value="deny">Deny: no job starts in this window</option>
+        <option value="allow">Allow: jobs start only in allow windows</option>
+      </select>
+    </label>
+    <label>Name
+      <input name="label" maxlength="64" placeholder="Quiet hours">
+    </label>
+    <fieldset>
+      <legend>Days</legend>
+      {% for day in days %}<label class="check"><input type="checkbox" name="day{{ loop.index0 }}" checked> {{ day }}</label>{% endfor %}
+    </fieldset>
+    <label>From
+      <input type="time" name="start" required>
+    </label>
+    <label>Until
+      <input type="time" name="end" required>
+    </label>
+    <p class="muted">An end at or before the start runs into the next day.</p>
+    <label class="check"><input type="checkbox" name="must_finish_before"> Jobs must finish first</label>
+    <p class="muted">For a deny rule, a job starts only if it should end before the window begins. For an allow rule, only if it should end before the window closes.</p>
+    <button>Add rule</button>
+  </form>
+</section>
+{% endblock %}

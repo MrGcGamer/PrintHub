@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO schedule_rules\n             (kind, days, start_minute, end_minute, must_finish_before, label, created_at)\n         VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "60ca80e54fdc075251de8ee222b07c020cbacb5db1f84f2b27b21f8a03202dff"
+}

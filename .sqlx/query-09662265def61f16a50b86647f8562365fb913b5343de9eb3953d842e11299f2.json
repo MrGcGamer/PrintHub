@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE printer_state SET bed_clear = ?, bed_changed_by = ?, bed_changed_at = ? WHERE id = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "09662265def61f16a50b86647f8562365fb913b5343de9eb3953d842e11299f2"
+}

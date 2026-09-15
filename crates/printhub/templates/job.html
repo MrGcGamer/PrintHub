@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ job.name }} · PrintHub{% endblock %}
+{% block head %}{% if job.slicing || job.printing %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="card-head">
+    <h1>{{ job.name }}</h1>
+    <span class="badge">{{ job.state }}</span>
+  </div>
+  {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if !job.error.is_empty() %}<p class="error">{{ job.error }}</p>{% endif %}
+  {% if let Some(blocked) = blocked %}<p class="waiting" role="status">Waiting: {{ blocked }}</p>{% endif %}
+  {% if job.printing %}<progress max="100" value="{{ job.progress }}">{{ job.progress }}%</progress>{% endif %}
+  <dl class="facts">
+    <dt>Owner</dt><dd>{{ job.owner }}</dd>
+    <dt>Uploaded</dt><dd>{{ job.created }}</dd>
+    <dt>Source</dt><dd>{{ job.source }}</dd>
+    {% if let Some(settings) = job.settings %}<dt>Settings</dt><dd>{{ settings }}</dd>{% endif %}
+    {% if !job.estimate.is_empty() %}<dt>Estimate</dt><dd>{{ job.estimate }}</dd>{% endif %}
+    {% if job.printing %}<dt>Progress</dt><dd>{{ job.progress }}%</dd>{% endif %}
+  </dl>
+</section>
+{% if !tools.is_empty() %}
+<section class="panel">
+  <h2>Filament</h2>
+  {% if confirm %}<form method="post" action="/jobs/{{ job.id }}/confirm">{% endif %}
+  <table>
+    <thead><tr><th>Filament</th><th>Needs</th><th>Spool</th></tr></thead>
+    <tbody>
+      {% for tool in tools %}
+      <tr>
+        <td><svg class="swatch" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="{{ tool.color }}" stroke="currentColor"/></svg> {{ tool.label }}: {{ tool.material }}</td>
+        <td>{{ tool.grams }}</td>
+        <td>
+          {% if confirm %}
+          <label><span class="visually-hidden">Spool for {{ tool.label }}</span>
+            <select name="spool_{{ tool.index }}" required>
+              <option value="">Choose a spool</option>
+              {% for choice in tool.choices %}<option value="{{ choice.value }}"{% if choice.selected %} selected{% endif %}>{{ choice.name }}</option>{% endfor %}
+            </select>
+          </label>
+          {% else %}
+          {{ tool.spool }}{% if !tool.tray.is_empty() %} <span class="muted">(tray {{ tool.tray }})</span>{% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if confirm %}
+  <button>Add to the queue</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% if can_manage && (job.can_cancel || job.can_requeue) %}
+<div class="controls">
+  {% if job.printing %}
+  <button class="secondary" hx-post="/printer/pause" hx-target="#control-result">Pause</button>
+  <button class="secondary" hx-post="/printer/resume" hx-target="#control-result">Resume</button>
+  {% endif %}
+  {% if job.can_requeue %}<form method="post" action="/jobs/{{ job.id }}/requeue"><button class="secondary">Retry</button></form>{% endif %}
+  {% if job.can_cancel %}<form method="post" action="/jobs/{{ job.id }}/cancel"><button class="danger">{% if job.printing %}Stop the print{% else %}Cancel the job{% endif %}</button></form>{% endif %}
+</div>
+{% endif %}
+<div id="control-result" role="status"></div>
+<p><a href="/jobs">Back to the queue</a></p>
+{% endblock %}

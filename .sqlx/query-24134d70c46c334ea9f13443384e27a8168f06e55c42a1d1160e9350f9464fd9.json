@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE job_tools SET spool_id = ? WHERE job_id = ? AND tool_index = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "24134d70c46c334ea9f13443384e27a8168f06e55c42a1d1160e9350f9464fd9"
+}

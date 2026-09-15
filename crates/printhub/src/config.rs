@@ -2,6 +2,7 @@
 
 use std::{fmt, net::SocketAddr, path::PathBuf, time::Duration};
 
+use jiff::tz::TimeZone;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -65,6 +66,11 @@ pub struct Config {
     pub max_upload_bytes: u64,
     pub slice_timeout: Duration,
     pub estimate_margin: f64,
+    pub orca_slicer: PathBuf,
+    /// OrcaSlicer's `resources/profiles/Elegoo` directory.
+    pub orca_profiles: PathBuf,
+    /// Schedule rules are wall-clock times in this zone.
+    pub timezone: TimeZone,
 }
 
 /// Printer firmware default when no access code has been set on the touchscreen.
@@ -170,6 +176,19 @@ impl Config {
                         .filter(|m| m.is_finite() && *m >= 1.0)
                 },
             )?,
+            orca_slicer: env
+                .get("ORCA_SLICER")
+                .map_or_else(|| "/opt/orcaslicer/bin/orca-slicer".into(), PathBuf::from),
+            orca_profiles: env.get("ORCA_PROFILES").map_or_else(
+                || "/opt/orcaslicer/resources/profiles/Elegoo".into(),
+                PathBuf::from,
+            ),
+            timezone: env.parse(
+                "TZ",
+                TimeZone::UTC,
+                "an IANA time zone like Europe/Berlin",
+                |raw| TimeZone::get(raw).ok(),
+            )?,
         })
     }
 }
@@ -195,6 +214,9 @@ impl fmt::Debug for Config {
             .field("max_upload_bytes", &self.max_upload_bytes)
             .field("slice_timeout", &self.slice_timeout)
             .field("estimate_margin", &self.estimate_margin)
+            .field("orca_slicer", &self.orca_slicer)
+            .field("orca_profiles", &self.orca_profiles)
+            .field("timezone", &self.timezone.iana_name())
             .finish()
     }
 }
@@ -287,6 +309,7 @@ mod tests {
         assert_eq!(config.max_upload_bytes, 200 * 1024 * 1024);
         assert_eq!(config.slice_timeout, Duration::from_secs(900));
         assert_eq!(config.estimate_margin, 1.15);
+        assert_eq!(config.timezone, TimeZone::UTC);
     }
 
     #[test]
@@ -311,10 +334,17 @@ mod tests {
             ("MAX_UPLOAD_MB", "0"),
             ("SLICE_TIMEOUT", "15"),
             ("ESTIMATE_MARGIN", "0.9"),
+            ("TZ", "Mars/Olympus_Mons"),
         ] {
             let err = config(&[("PRINTER_HOST", "cc2"), (var, value)]).unwrap_err();
             assert_eq!(err.var, var, "{value:?} should be rejected");
         }
+    }
+
+    #[test]
+    fn time_zone_by_name() {
+        let config = config(&[("PRINTER_HOST", "cc2"), ("TZ", "Europe/Berlin")]).unwrap();
+        assert_eq!(config.timezone.iana_name(), Some("Europe/Berlin"));
     }
 
     #[test]

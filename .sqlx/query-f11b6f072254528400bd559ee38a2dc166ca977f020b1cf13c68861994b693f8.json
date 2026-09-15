@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE job_tools SET canvas_id = ?, tray_id = ? WHERE job_id = ? AND tool_index = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "f11b6f072254528400bd559ee38a2dc166ca977f020b1cf13c68861994b693f8"
+}

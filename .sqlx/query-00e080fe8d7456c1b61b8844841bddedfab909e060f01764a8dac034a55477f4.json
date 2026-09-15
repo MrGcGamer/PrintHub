@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs SET\n             state = ?,\n             error = COALESCE(?, error),\n             position = CASE WHEN ? THEN (SELECT COALESCE(MAX(position), 0) + 1 FROM jobs)\n                             ELSE position END,\n             started_at = CASE WHEN ? THEN ? ELSE started_at END,\n             finished_at = CASE WHEN ? THEN ? ELSE finished_at END\n         WHERE id = ? AND state = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "00e080fe8d7456c1b61b8844841bddedfab909e060f01764a8dac034a55477f4"
+}

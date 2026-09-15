@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Upload a job · PrintHub{% endblock %}
+{% block content %}
+<form method="post" action="/jobs" enctype="multipart/form-data" class="panel narrow">
+  <h1>Upload a job</h1>
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <label>File
+    <input type="file" name="file" accept="{% if stl_enabled %}.stl,{% endif %}.gcode" required>
+  </label>
+  <p class="muted">{% if stl_enabled %}An STL model is sliced here with the settings below. {% endif %}G-code must already be sliced for the Centauri Carbon 2. Up to {{ max_mb }} MB.</p>
+  {% if stl_enabled %}
+  <fieldset>
+    <legend>Slicing a model</legend>
+    <label>Spool
+      <select name="spool_id">
+        {% for spool in spools %}<option value="{{ spool.value }}"{% if spool.selected %} selected{% endif %}>{{ spool.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Print profile
+      <select name="process">
+        {% for process in processes %}<option value="{{ process.value }}"{% if process.selected %} selected{% endif %}>{{ process.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Filament profile
+      <select name="filament">
+        <option value="">Match the spool's material</option>
+        {% for filament in filaments %}<option value="{{ filament.value }}"{% if filament.selected %} selected{% endif %}>{{ filament.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Infill (%)
+      <input name="infill" value="{{ infill }}" inputmode="numeric">
+    </label>
+    <label class="check"><input type="checkbox" name="supports"{% if supports %} checked{% endif %}> Supports</label>
+  </fieldset>
+  {% endif %}
+  <button type="submit">Upload</button>
+</form>
+{% endblock %}

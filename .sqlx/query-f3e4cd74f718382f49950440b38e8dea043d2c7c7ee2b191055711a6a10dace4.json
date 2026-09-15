@@ -1,0 +1,242 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT j.id AS \"id!\", j.owner_id, u.username AS \"owner_name?\", j.name, j.source,\n                  j.state, j.position, j.process_profile, j.filament_profile, j.supports,\n                  j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,\n                  j.progress, j.error, j.created_at, j.started_at, j.finished_at\n           FROM jobs j LEFT JOIN users u ON u.id = j.owner_id\n           WHERE j.state NOT IN ('done', 'failed', 'cancelled')\n              OR j.id IN (SELECT id FROM jobs WHERE state IN ('done', 'failed', 'cancelled')\n                          ORDER BY finished_at DESC, id DESC LIMIT ?)\n           ORDER BY CASE j.state WHEN 'printing' THEN 0 WHEN 'uploading' THEN 0\n                                 WHEN 'queued' THEN 1 WHEN 'awaiting_confirm' THEN 2\n                                 WHEN 'slicing' THEN 2 ELSE 3 END,\n                    CASE WHEN j.state IN ('done', 'failed', 'cancelled')\n                         THEN -j.finished_at ELSE j.position END,\n                    j.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "owner_id",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "owner_id"
+          }
+        }
+      },
+      {
+        "name": "owner_name?",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "source",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "name": "state",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "name": "position",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "name": "process_profile",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "process_profile"
+          }
+        }
+      },
+      {
+        "name": "filament_profile",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "filament_profile"
+          }
+        }
+      },
+      {
+        "name": "supports",
+        "ordinal": 9,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "supports"
+          }
+        }
+      },
+      {
+        "name": "infill_percent",
+        "ordinal": 10,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "infill_percent"
+          }
+        }
+      },
+      {
+        "name": "estimated_seconds",
+        "ordinal": 11,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "estimated_seconds"
+          }
+        }
+      },
+      {
+        "name": "layers",
+        "ordinal": 12,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "layers"
+          }
+        }
+      },
+      {
+        "name": "printer_task_uuid",
+        "ordinal": 13,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "printer_task_uuid"
+          }
+        }
+      },
+      {
+        "name": "progress",
+        "ordinal": 14,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "progress"
+          }
+        }
+      },
+      {
+        "name": "error",
+        "ordinal": 15,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 16,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "started_at",
+        "ordinal": 17,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "name": "finished_at",
+        "ordinal": 18,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "finished_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "f3e4cd74f718382f49950440b38e8dea043d2c7c7ee2b191055711a6a10dace4"
+}

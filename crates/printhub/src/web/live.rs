@@ -16,10 +16,13 @@ use tokio_stream::{StreamExt, wrappers::WatchStream};
 use super::{
     AppState,
     error::{AppError, render},
-    session::{AdminUser, CurrentUser},
+    session::CurrentUser,
     views::PrinterCard,
 };
-use crate::camera;
+use crate::{
+    camera,
+    jobs::{self, JobState},
+};
 
 #[derive(Template)]
 #[template(path = "printer_card.html")]
@@ -62,11 +65,21 @@ pub async fn printer_events(
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
+/// Admins control any print; members only a print of their own job.
 pub async fn control(
     State(state): State<AppState>,
-    AdminUser(admin): AdminUser,
+    current: CurrentUser,
     Path(action): Path<String>,
 ) -> Result<Response, AppError> {
+    if !current.user.is_admin() {
+        let printing = jobs::in_state(&state.db, JobState::Printing).await?;
+        if !printing
+            .iter()
+            .any(|job| job.owner_id() == Some(current.user.id))
+        {
+            return Err(AppError::Forbidden);
+        }
+    }
     let Some(client) = state.printer.client() else {
         return notice("error", "The printer is not connected.");
     };
@@ -78,7 +91,7 @@ pub async fn control(
     };
     match result {
         Ok(()) => {
-            tracing::info!(username = %admin.user.username, action, "printer control");
+            tracing::info!(username = %current.user.username, action, "printer control");
             notice("notice", done)
         }
         Err(err) => notice("error", &format!("The printer refused: {err}")),

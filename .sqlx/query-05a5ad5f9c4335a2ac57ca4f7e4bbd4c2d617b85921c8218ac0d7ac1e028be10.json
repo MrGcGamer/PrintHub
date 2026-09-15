@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO job_tools (job_id, tool_index, material, color_hex, grams, spool_id)\n             VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "05a5ad5f9c4335a2ac57ca4f7e4bbd4c2d617b85921c8218ac0d7ac1e028be10"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs SET printer_task_uuid = COALESCE(?, printer_task_uuid), progress = 0\n         WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "71e12ffecfe5981e7df805de589e8989460918ec3debfba1980ada719dc4dbb9"
+}

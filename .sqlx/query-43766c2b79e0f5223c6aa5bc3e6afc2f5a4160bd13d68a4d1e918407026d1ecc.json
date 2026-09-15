@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT tool_index, material, color_hex, grams, spool_id, canvas_id, tray_id\n         FROM job_tools WHERE job_id = ? ORDER BY tool_index",
+  "describe": {
+    "columns": [
+      {
+        "name": "tool_index",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "job_tools",
+            "name": "tool_index"
+          }
+        }
+      },
+      {
+        "name": "material",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "job_tools",
+            "name": "material"
+          }
+        }
+      },
+      {
+        "name": "color_hex",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "job_tools",
+            "name": "color_hex"
+          }
+        }
+      },
+      {
+        "name": "grams",
+        "ordinal": 3,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "job_tools",
+            "name": "grams"
+          }
+        }
+      },
+      {
+        "name": "spool_id",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "job_tools",
+            "name": "spool_id"
+          }
+        }
+      },
+      {
+        "name": "canvas_id",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "job_tools",
+            "name": "canvas_id"
+          }
+        }
+      },
+      {
+        "name": "tray_id",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "job_tools",
+            "name": "tray_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "43766c2b79e0f5223c6aa5bc3e6afc2f5a4160bd13d68a4d1e918407026d1ecc"
+}

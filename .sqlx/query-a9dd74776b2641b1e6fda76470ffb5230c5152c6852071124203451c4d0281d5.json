@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT bed_clear FROM printer_state WHERE id = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "bed_clear",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "printer_state",
+            "name": "bed_clear"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a9dd74776b2641b1e6fda76470ffb5230c5152c6852071124203451c4d0281d5"
+}

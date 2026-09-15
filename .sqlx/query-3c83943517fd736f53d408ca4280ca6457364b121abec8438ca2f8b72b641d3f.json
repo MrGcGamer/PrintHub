@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE jobs SET estimated_seconds = ?, layers = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "3c83943517fd736f53d408ca4280ca6457364b121abec8438ca2f8b72b641d3f"
+}

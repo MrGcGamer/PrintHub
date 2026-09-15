@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Queue · PrintHub{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="card-head">
+    <h1>Queue</h1>
+    <a href="/jobs/new">Upload a job</a>
+  </div>
+  {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+  {% if bed_clear %}
+  <p class="muted">The bed is marked clear.</p>
+  {% else %}
+  <div class="bed-check">
+    <p><strong>Nobody has confirmed that the bed is clear.</strong> No job starts until someone does.</p>
+    {% if camera_enabled %}<img src="/camera/snapshot.jpg" alt="The printer bed, just now" width="320">{% endif %}
+    <form method="post" action="/printer/bed-clear"><button>The bed is clear</button></form>
+  </div>
+  {% endif %}
+  {% if rows.is_empty() %}
+  <p class="muted">No jobs yet.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Job</th><th>Owner</th><th>State</th><th>Estimate</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a href="/jobs/{{ row.id }}">{{ row.name }}</a>{% if !row.detail.is_empty() %}<br><span class="muted">{{ row.detail }}</span>{% endif %}</td>
+        <td>{{ row.owner }}</td>
+        <td>{{ row.state }}</td>
+        <td>{{ row.estimate }}</td>
+        <td class="actions">
+          {% if row.can_move %}
+          <form method="post" action="/jobs/{{ row.id }}/move"><input type="hidden" name="direction" value="up"><button class="secondary" aria-label="Move {{ row.name }} earlier">↑</button></form>
+          <form method="post" action="/jobs/{{ row.id }}/move"><input type="hidden" name="direction" value="down"><button class="secondary" aria-label="Move {{ row.name }} later">↓</button></form>
+          {% endif %}
+          {% if row.can_requeue %}<form method="post" action="/jobs/{{ row.id }}/requeue"><button class="secondary">Retry</button></form>{% endif %}
+          {% if row.can_cancel %}<form method="post" action="/jobs/{{ row.id }}/cancel"><button class="secondary">{% if row.printing %}Stop{% else %}Cancel{% endif %}</button></form>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,7 +1,11 @@
 //! The web interface end to end: the real router on a local port, an in-memory database and
 //! the fake printer.
 
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use fakeprinter::{FakePrinter, Options};
 use futures::StreamExt;
@@ -10,9 +14,12 @@ use printhub::{
     auth,
     camera::CameraHub,
     cc2::{ClientConfig, PrinterClient, Timing},
-    config::Config,
-    inventory,
+    config::{Config, Nozzle},
+    dispatcher, inventory,
+    jobs::{self, JobState},
     printer::PrinterLink,
+    schedule,
+    slicer::Slicer,
     store::{self, Db},
     web::{self, AppState},
 };
@@ -25,6 +32,11 @@ use tokio::{net::TcpListener, time::timeout};
 const ADMIN_PASSWORD: &str = "admin-password";
 const MEMBER_PASSWORD: &str = "member-password";
 const WAIT: Duration = Duration::from_secs(10);
+const CUBE_GCODE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/orca-2.4.2-cc2-pla-cube.gcode"
+);
+const PROCESS: &str = "0.20mm Standard @Elegoo CC2 0.4 nozzle";
 
 struct App {
     base: String,
@@ -33,7 +45,24 @@ struct App {
     db: Db,
 }
 
+fn scratch(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "printhub-web-{name}-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 async fn app() -> App {
+    app_with(None).await
+}
+
+async fn app_with(slicer: Option<Slicer>) -> App {
     let printer = FakePrinter::start(Options::default()).await.unwrap();
     let env = HashMap::from([
         ("PRINTER_HOST", "127.0.0.1".to_owned()),
@@ -48,6 +77,7 @@ async fn app() -> App {
             "PRINTER_CAMERA_PORT",
             printer.camera_addr.port().to_string(),
         ),
+        ("DATA_DIR", scratch("data").display().to_string()),
     ]);
     let config = Config::from_lookup(|var| env.get(var).cloned()).unwrap();
 
@@ -63,10 +93,11 @@ async fn app() -> App {
         Duration::from_millis(300),
     );
     let link = PrinterLink::start(&config);
-    let state = AppState::new(db.clone(), config, link, Some(camera))
+    let state = AppState::new(db.clone(), config, link, Some(camera), slicer)
         .await
         .unwrap();
     tokio::spawn(web::unbind_emptied_trays(state.clone()));
+    tokio::spawn(dispatcher::run(state.clone()));
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -102,6 +133,29 @@ fn form_body(fields: &[(&str, &str)]) -> String {
         .join("&")
 }
 
+fn multipart_body(fields: &[(&str, &str)], file_name: &str, file: &[u8]) -> (String, Vec<u8>) {
+    const BOUNDARY: &str = "printhub-test-boundary";
+    let mut body = Vec::new();
+    for (name, value) in fields {
+        body.extend_from_slice(
+            format!(
+                "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
+            )
+            .as_bytes(),
+        );
+    }
+    body.extend_from_slice(
+        format!(
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{file_name}\"\r\n\
+             Content-Type: application/octet-stream\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(file);
+    body.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={BOUNDARY}"), body)
+}
+
 fn session_cookie(response: &reqwest::Response) -> Option<String> {
     response
         .headers()
@@ -126,6 +180,17 @@ fn spool_fields<'a>(
         ("initial_grams", "1000"),
         ("price", "19,99"),
     ]
+}
+
+/// The id at the end of a path like `/spools/3?done=created`.
+fn id_of(path: &str) -> String {
+    path.split('?')
+        .next()
+        .unwrap()
+        .rsplit('/')
+        .next()
+        .unwrap()
+        .to_owned()
 }
 
 impl App {
@@ -159,6 +224,25 @@ impl App {
         request.send().await.unwrap()
     }
 
+    async fn upload(
+        &self,
+        cookie: &str,
+        fields: &[(&str, &str)],
+        file_name: &str,
+        file: &[u8],
+    ) -> reqwest::Response {
+        let (content_type, body) = multipart_body(fields, file_name, file);
+        self.http
+            .post(self.url("/jobs"))
+            .header("origin", &self.base)
+            .header("cookie", cookie)
+            .header(CONTENT_TYPE, content_type)
+            .body(body)
+            .send()
+            .await
+            .unwrap()
+    }
+
     async fn login(&self, username: &str, password: &str) -> String {
         let response = self
             .post(
@@ -189,6 +273,44 @@ impl App {
         assert_eq!(response.status(), StatusCode::SEE_OTHER);
         let location = response.headers()[LOCATION].to_str().unwrap();
         location.split('?').next().unwrap().to_owned()
+    }
+
+    /// Tray contents arrive shortly after the app registers with the printer, and binding
+    /// is refused until then.
+    async fn bind(&self, cookie: &str, tray: u32, spool_id: &str) {
+        timeout(WAIT, async {
+            loop {
+                let response = self
+                    .post(
+                        &format!("/trays/0/{tray}/bind"),
+                        Some(cookie),
+                        &[("spool_id", spool_id)],
+                    )
+                    .await;
+                if response.status() == StatusCode::SEE_OTHER {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("the tray accepts a spool");
+    }
+
+    async fn wait_for_job(&self, id: i64, done: impl Fn(&jobs::Job) -> bool) -> jobs::Job {
+        timeout(WAIT, async {
+            loop {
+                let job = jobs::get(&self.db, id).await.unwrap().unwrap();
+                if done(&job) {
+                    return job;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!("job {id} never got there");
+        })
     }
 
     /// Reads a streaming response until `needle` appears in what has arrived.
@@ -226,14 +348,13 @@ async fn anonymous_visitors_are_sent_to_login() {
     assert!(login.text().await.unwrap().contains("Log in"));
 
     assert_eq!(app.get("/healthz", None).await.status(), StatusCode::OK);
-    assert_eq!(
-        app.get("/events/printer", None).await.status(),
-        StatusCode::SEE_OTHER
-    );
-    assert_eq!(
-        app.get("/inventory", None).await.status(),
-        StatusCode::SEE_OTHER
-    );
+    for path in ["/events/printer", "/inventory", "/jobs"] {
+        assert_eq!(
+            app.get(path, None).await.status(),
+            StatusCode::SEE_OTHER,
+            "{path}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -375,7 +496,8 @@ async fn invite_creates_a_member_without_admin_rights() {
     );
     assert_eq!(
         app.post("/printer/pause", Some(&sam), &[]).await.status(),
-        StatusCode::FORBIDDEN
+        StatusCode::FORBIDDEN,
+        "a member with no running job cannot control the printer"
     );
 
     let reused = app
@@ -564,7 +686,6 @@ async fn members_edit_only_their_own_spools() {
 async fn tray_spools_show_on_the_card_and_unbind_when_emptied() {
     let app = app().await;
     let admin = app.login("admin", ADMIN_PASSWORD).await;
-    let id_of = |path: &str| path.rsplit('/').next().unwrap().to_owned();
     let petg = id_of(
         &app.add_spool(&admin, &spool_fields("PETG", "Red", "#FF0000"))
             .await,
@@ -574,34 +695,8 @@ async fn tray_spools_show_on_the_card_and_unbind_when_emptied() {
             .await,
     );
 
-    // Tray contents arrive shortly after the app registers with the printer.
-    timeout(WAIT, async {
-        loop {
-            let response = app
-                .post(
-                    "/trays/0/1/bind",
-                    Some(&admin),
-                    &[("spool_id", pla.as_str())],
-                )
-                .await;
-            if response.status() == StatusCode::SEE_OTHER {
-                return;
-            }
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-    })
-    .await
-    .expect("tray A2 accepts a spool");
-    assert_eq!(
-        app.post(
-            "/trays/0/0/bind",
-            Some(&admin),
-            &[("spool_id", petg.as_str())]
-        )
-        .await
-        .status(),
-        StatusCode::SEE_OTHER
-    );
+    app.bind(&admin, 1, &pla).await;
+    app.bind(&admin, 0, &petg).await;
     assert_eq!(
         app.post(
             "/trays/0/3/bind",
@@ -630,7 +725,7 @@ async fn tray_spools_show_on_the_card_and_unbind_when_emptied() {
     app.printer.set_tray(1, "", "", 0);
     let refreshed = app.post("/trays/refresh", Some(&admin), &[]).await;
     assert_eq!(refreshed.headers()[LOCATION], "/inventory?done=refreshed");
-    timeout(WAIT, async {
+    let bindings = timeout(WAIT, async {
         loop {
             let bindings = inventory::bindings(&app.db).await.unwrap();
             if bindings.len() == 1 {
@@ -640,6 +735,258 @@ async fn tray_spools_show_on_the_card_and_unbind_when_emptied() {
         }
     })
     .await
-    .map(|bindings| assert_eq!(bindings[0].spool.material, "PETG"))
     .expect("the emptied tray loses its spool");
+    assert_eq!(bindings[0].spool.material, "PETG");
+}
+
+#[tokio::test]
+async fn gcode_job_prints_from_its_spool_and_deducts_filament() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let spool = id_of(
+        &app.add_spool(&admin, &spool_fields("PLA", "Orange", "#F2754E"))
+            .await,
+    );
+    app.bind(&admin, 0, &spool).await;
+
+    let refused = app.upload(&admin, &[], "notes.txt", b"hello").await;
+    assert_eq!(refused.status(), StatusCode::BAD_REQUEST);
+    let not_sliced = app.upload(&admin, &[], "raw.gcode", b"G28\nG1 X10\n").await;
+    assert_eq!(not_sliced.status(), StatusCode::BAD_REQUEST);
+
+    let gcode = std::fs::read(CUBE_GCODE).unwrap();
+    let uploaded = app.upload(&admin, &[], "cube.gcode", &gcode).await;
+    assert_eq!(uploaded.status(), StatusCode::SEE_OTHER);
+    let job_path = uploaded.headers()[LOCATION].to_str().unwrap().to_owned();
+    let job_id: i64 = id_of(&job_path).parse().unwrap();
+    let page = app.get(&job_path, Some(&admin)).await.text().await.unwrap();
+    assert!(page.contains("Filament 1: PLA"), "{page}");
+    assert!(page.contains("Add to the queue"));
+
+    let confirmed = app
+        .post(
+            &format!("{job_path}/confirm"),
+            Some(&admin),
+            &[("spool_0", spool.as_str())],
+        )
+        .await;
+    assert_eq!(confirmed.headers()[LOCATION], "/jobs?done=queued");
+    let queue = app.get("/jobs", Some(&admin)).await.text().await.unwrap();
+    assert!(
+        queue.contains("Nobody has confirmed that the bed is clear."),
+        "{queue}"
+    );
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(
+        app.printer.started_prints().is_empty(),
+        "nothing starts before the bed is clear"
+    );
+
+    app.post("/printer/bed-clear", Some(&admin), &[]).await;
+    // The task id is recorded once the dispatcher has seen the print running.
+    app.wait_for_job(job_id, |job| {
+        job.state == JobState::Printing && job.printer_task_uuid.is_some()
+    })
+    .await;
+    let started = app.printer.started_prints();
+    assert_eq!(started[0]["filename"], format!("printhub-{job_id}.gcode"));
+    assert_eq!(
+        started[0]["config"]["slot_map"],
+        serde_json::json!([{"t": 0, "canvas_id": 0, "tray_id": 0}])
+    );
+    assert_eq!(app.printer.uploads()[0].bytes, gcode);
+    assert!(
+        !jobs::bed_clear(&app.db).await.unwrap(),
+        "a started print leaves the bed not clear"
+    );
+
+    app.printer.complete_print();
+    app.wait_for_job(job_id, |job| job.state == JobState::Done)
+        .await;
+    let left = inventory::spool(&app.db, spool.parse().unwrap())
+        .await
+        .unwrap()
+        .unwrap()
+        .remaining_grams;
+    assert!((left - (1000.0 - 3.54)).abs() < 1e-9, "{left}");
+}
+
+/// A stand-in OrcaSlicer that copies the cube fixture to `--outputdir` and keeps the filament
+/// profile it was given.
+#[cfg(unix)]
+fn stub_slicer() -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = scratch("stub");
+    let path = dir.join("orca-slicer");
+    std::fs::write(
+        &path,
+        format!(
+            "#!/bin/sh\n\
+             while [ $# -gt 0 ]; do\n\
+               case \"$1\" in --outputdir) out=$2;; --load-filaments) fil=$2;; esac\n\
+               shift\n\
+             done\n\
+             cp \"$fil\" \"$(dirname \"$0\")/filament.json\"\n\
+             cp '{CUBE_GCODE}' \"$out/plate_1.gcode\"\n"
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+fn stub_profiles() -> PathBuf {
+    let dir = scratch("profiles");
+    let machine = "Elegoo Centauri Carbon 2 0.4 nozzle";
+    for (file, profile) in [
+        (
+            "machine.json",
+            serde_json::json!({"name": machine, "type": "machine", "instantiation": "true"}),
+        ),
+        (
+            "process.json",
+            serde_json::json!({"name": PROCESS, "type": "process", "instantiation": "true", "compatible_printers": [machine]}),
+        ),
+        (
+            "pla.json",
+            serde_json::json!({"name": "Elegoo PLA @ECC2", "type": "filament", "instantiation": "true", "compatible_printers": [machine]}),
+        ),
+    ] {
+        std::fs::write(dir.join(file), profile.to_string()).unwrap();
+    }
+    dir
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn stl_uploads_are_sliced_for_the_chosen_spool() {
+    let binary = stub_slicer();
+    let slicer = Slicer::new(binary.clone(), &stub_profiles(), Nozzle::Mm04, WAIT).unwrap();
+    let app = app_with(Some(slicer)).await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let sam = app.member("sam").await;
+    let spool = id_of(
+        &app.add_spool(&admin, &spool_fields("PLA", "Blue", "#2850DF"))
+            .await,
+    );
+    let model = b"solid cube\nendsolid cube\n";
+
+    let form = app.get("/jobs/new", Some(&sam)).await.text().await.unwrap();
+    assert!(form.contains(PROCESS), "{form}");
+
+    let no_spool = app
+        .upload(
+            &sam,
+            &[("process", PROCESS), ("infill", "20")],
+            "cube.stl",
+            model,
+        )
+        .await;
+    assert_eq!(no_spool.status(), StatusCode::BAD_REQUEST);
+
+    let uploaded = app
+        .upload(
+            &sam,
+            &[
+                ("spool_id", spool.as_str()),
+                ("process", PROCESS),
+                ("filament", ""),
+                ("infill", "20"),
+                ("supports", "on"),
+            ],
+            "cube.stl",
+            model,
+        )
+        .await;
+    assert_eq!(uploaded.status(), StatusCode::SEE_OTHER);
+    let job_id: i64 = id_of(uploaded.headers()[LOCATION].to_str().unwrap())
+        .parse()
+        .unwrap();
+
+    let job = app
+        .wait_for_job(job_id, |job| job.state == JobState::AwaitingConfirm)
+        .await;
+    assert_eq!(
+        job.filament_profile.as_deref(),
+        Some("Elegoo PLA @ECC2"),
+        "chosen by the spool's material"
+    );
+    assert_eq!((job.supports, job.infill_percent), (Some(true), Some(20)));
+    let tools = jobs::tools(&app.db, job_id).await.unwrap();
+    assert_eq!(tools.len(), 1);
+    assert_eq!(tools[0].spool_id, Some(spool.parse().unwrap()));
+    let filament: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(binary.with_file_name("filament.json")).unwrap())
+            .unwrap();
+    assert_eq!(filament["filament_colour"], serde_json::json!(["#2850DF"]));
+
+    let kim = app.member("kim").await;
+    let cancel = format!("/jobs/{job_id}/cancel");
+    assert_eq!(
+        app.post(&cancel, Some(&kim), &[]).await.status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        app.post(&cancel, Some(&sam), &[]).await.status(),
+        StatusCode::SEE_OTHER
+    );
+    assert_eq!(
+        jobs::get(&app.db, job_id).await.unwrap().unwrap().state,
+        JobState::Cancelled
+    );
+}
+
+#[tokio::test]
+async fn print_windows_are_admin_only() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let sam = app.member("sam").await;
+    assert_eq!(
+        app.get("/admin/schedule", Some(&sam)).await.status(),
+        StatusCode::FORBIDDEN
+    );
+
+    let no_days = app
+        .post(
+            "/admin/schedule",
+            Some(&admin),
+            &[("kind", "deny"), ("start", "22:00"), ("end", "07:00")],
+        )
+        .await;
+    assert_eq!(no_days.status(), StatusCode::BAD_REQUEST);
+
+    let added = app
+        .post(
+            "/admin/schedule",
+            Some(&admin),
+            &[
+                ("kind", "deny"),
+                ("label", "Quiet hours"),
+                ("start", "22:00"),
+                ("end", "07:00"),
+                ("day0", "on"),
+                ("must_finish_before", "on"),
+            ],
+        )
+        .await;
+    assert_eq!(added.headers()[LOCATION], "/admin/schedule?done=added");
+    let page = app
+        .get("/admin/schedule", Some(&admin))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(page.contains("Deny: Quiet hours"), "{page}");
+    assert!(page.contains("22:00–07:00"));
+
+    let rules = schedule::rules(&app.db).await.unwrap();
+    assert_eq!(rules.len(), 1);
+    assert!(rules[0].1.must_finish_before);
+    app.post(
+        &format!("/admin/schedule/{}/delete", rules[0].0),
+        Some(&admin),
+        &[],
+    )
+    .await;
+    assert!(schedule::rules(&app.db).await.unwrap().is_empty());
 }

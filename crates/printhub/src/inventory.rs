@@ -284,6 +284,48 @@ pub async fn weigh_in(
     Ok(())
 }
 
+/// Deducts what a print used, as a ledger entry tied to the job.
+#[allow(clippy::too_many_arguments)]
+pub async fn record_use(
+    conn: &mut sqlx::SqliteConnection,
+    spool_id: i64,
+    user_id: Option<i64>,
+    job_id: i64,
+    kind: ConsumptionKind,
+    grams: f64,
+    note: &str,
+    now: i64,
+) -> Result<(), InventoryError> {
+    sqlx::query!(
+        "UPDATE spools SET remaining_grams = remaining_grams - ? WHERE id = ?",
+        grams,
+        spool_id,
+    )
+    .execute(&mut *conn)
+    .await?;
+    let kind = kind.as_str();
+    sqlx::query!(
+        "INSERT INTO consumption (spool_id, user_id, job_id, kind, grams, note, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        spool_id,
+        user_id,
+        job_id,
+        kind,
+        grams,
+        note,
+        now,
+    )
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// `A1` for the first tray of the first CANVAS unit.
+pub fn tray_label(canvas_id: i64, tray_id: i64) -> String {
+    let letter = char::from(b'A' + u8::try_from(canvas_id.rem_euclid(26)).unwrap_or(0));
+    format!("{letter}{}", tray_id + 1)
+}
+
 /// Newest first.
 pub async fn history(db: &Db, spool_id: i64) -> Result<Vec<Consumption>, InventoryError> {
     let rows = sqlx::query!(

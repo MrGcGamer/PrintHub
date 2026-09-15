@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\", kind, days, start_minute, end_minute, must_finish_before, label\n           FROM schedule_rules ORDER BY kind, start_minute, id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedule_rules",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "kind",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedule_rules",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "name": "days",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedule_rules",
+            "name": "days"
+          }
+        }
+      },
+      {
+        "name": "start_minute",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedule_rules",
+            "name": "start_minute"
+          }
+        }
+      },
+      {
+        "name": "end_minute",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedule_rules",
+            "name": "end_minute"
+          }
+        }
+      },
+      {
+        "name": "must_finish_before",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "schedule_rules",
+            "name": "must_finish_before"
+          }
+        }
+      },
+      {
+        "name": "label",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "schedule_rules",
+            "name": "label"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d486e3236b0542ad3687d25b62feb957e4d35a9c73e7afba9d8d63c87f34f662"
+}

@@ -170,6 +170,17 @@ td form { margin: 0; }
   border: 1px solid var(--line);
 }
 
+.bar nav { flex-wrap: wrap; }
+
+fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 1rem; padding: 0.75rem 1rem 0; }
+legend { font-weight: 600; padding: 0 0.3rem; }
+input[type="checkbox"] { display: inline-block; width: auto; margin: 0 0.4rem 0 0; vertical-align: middle; }
+label.check { display: inline-flex; align-items: center; font-weight: 400; margin-right: 0.9rem; }
+
+.waiting { color: var(--warn); font-weight: 600; }
+.bed-check { border: 1px solid var(--warn); border-radius: 8px; padding: 0.75rem 1rem; margin: 0 0 1rem; }
+.bed-check img { display: block; max-width: 100%; height: auto; border-radius: 8px; margin: 0 0 0.75rem; background: #000; }
+
 .visually-hidden {
   position: absolute;
   width: 1px;

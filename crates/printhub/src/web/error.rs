@@ -7,6 +7,7 @@ use axum::{
 use crate::{
     accounts::{AccountError, User},
     inventory::InventoryError,
+    jobs::JobError,
 };
 
 #[derive(Debug)]
@@ -41,6 +42,23 @@ impl From<InventoryError> for AppError {
             InventoryError::Db(err) => Self::Internal(err.into()),
             other => Self::BadRequest(other.to_string()),
         }
+    }
+}
+
+impl From<JobError> for AppError {
+    fn from(err: JobError) -> Self {
+        match err {
+            JobError::NotFound => Self::NotFound,
+            JobError::Inventory(err) => err.into(),
+            JobError::Db(err) => Self::Internal(err.into()),
+            other => Self::BadRequest(other.to_string()),
+        }
+    }
+}
+
+impl From<sqlx::Error> for AppError {
+    fn from(err: sqlx::Error) -> Self {
+        Self::Internal(err.into())
     }
 }
 
