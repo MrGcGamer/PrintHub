@@ -1,5 +1,6 @@
 /.env
 /.git
+/.github
 /.claude
 /target
 /data
