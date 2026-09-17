@@ -5,12 +5,12 @@
 <section class="panel">
   <div class="card-head">
     <h1>{{ job.name }}</h1>
-    <span class="badge">{{ job.state }}</span>
+    <span><span class="badge">{{ job.state }}</span><a class="help" href="/wiki/queue#job-states" aria-label="Help: job states">?</a></span>
   </div>
   {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
   {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   {% if !job.error.is_empty() %}<p class="error">{{ job.error }}</p>{% endif %}
-  {% if let Some(blocked) = blocked %}<p class="waiting" role="status">Waiting: {{ blocked }}</p>{% endif %}
+  {% if let Some(blocked) = blocked %}<p class="waiting" role="status">Waiting: {{ blocked }} <a class="help" href="/wiki/queue/waiting" aria-label="Help: why a job waits">?</a></p>{% endif %}
   {% if job.printing %}<progress max="100" value="{{ job.progress }}">{{ job.progress }}%</progress>{% endif %}
   <dl class="facts">
     <dt>Owner</dt><dd>{{ job.owner }}</dd>
@@ -24,7 +24,7 @@
 </section>
 {% if !tools.is_empty() %}
 <section class="panel">
-  <h2>Filament</h2>
+  <h2>Filament <a class="help" href="/wiki/queue#confirming" aria-label="Help: choosing spools">?</a></h2>
   {% if confirm %}<form method="post" action="/jobs/{{ job.id }}/confirm">{% endif %}
   <table>
     <thead><tr><th>Filament</th><th>Needs</th><th>Spool</th></tr></thead>

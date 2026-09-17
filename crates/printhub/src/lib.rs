@@ -14,3 +14,4 @@ pub mod slicer;
 pub mod stats;
 pub mod store;
 pub mod web;
+pub mod wiki;

@@ -5,6 +5,7 @@ use axum::{
 };
 
 use super::error::AppError;
+use crate::wiki;
 
 const HTMX: &[u8] = include_bytes!("../../static/htmx.min.js");
 const HTMX_SSE: &[u8] = include_bytes!("../../static/htmx-ext-sse.min.js");
@@ -31,6 +32,11 @@ pub async fn serve(Path(file): Path<String>) -> Result<Response, AppError> {
         _ => return Err(AppError::NotFound),
     };
     Ok(cached(body, content_type))
+}
+
+pub async fn wiki_image(Path(file): Path<String>) -> Result<Response, AppError> {
+    let image = wiki::image(&file).ok_or(AppError::NotFound)?;
+    Ok(cached(image.bytes, "image/jpeg"))
 }
 
 /// Browsers request `/favicon.ico` at the root whatever the page links to.

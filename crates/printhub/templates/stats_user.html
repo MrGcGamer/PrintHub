@@ -3,7 +3,7 @@
 {% block content %}
 <section class="panel">
   <div class="card-head">
-    <h1>{{ name }}</h1>
+    <h1>{{ name }} <a class="help" href="/wiki/stats" aria-label="Help: statistics">?</a></h1>
     <nav class="periods" aria-label="Period">
       {% for link in periods %}<a href="{{ link.href }}"{% if link.current %} aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}
     </nav>
@@ -13,7 +13,7 @@
     {% for tile in tiles %}<div class="tile"><dt>{{ tile.label }}</dt><dd>{{ tile.value }}</dd></div>{% endfor %}
   </dl>
   {% if !debts.is_empty() %}
-  <h2>Balances</h2>
+  <h2>Balances <a class="help" href="/wiki/stats/balances" aria-label="Help: balances">?</a></h2>
   <ul>
     {% for debt in debts %}<li>{{ debt.debtor }} owes {{ debt.creditor }} {{ debt.amount }}</li>{% endfor %}
   </ul>

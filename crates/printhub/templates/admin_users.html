@@ -2,7 +2,7 @@
 {% block title %}Users · PrintHub{% endblock %}
 {% block content %}
 <section class="panel">
-  <h1>Users</h1>
+  <h1>Users <a class="help" href="/wiki/accounts" aria-label="Help: accounts">?</a></h1>
   {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
   {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   {% if let Some(link) = link %}
@@ -13,7 +13,7 @@
   {% endif %}
   <table>
     <thead>
-      <tr><th>User</th><th>Role</th><th>Status</th><th>Permissions</th><th>Joined</th><th><span class="visually-hidden">Actions</span></th></tr>
+      <tr><th>User</th><th>Role <a class="help" href="/wiki/accounts#what-admins-cannot-change" aria-label="Help: roles">?</a></th><th>Status</th><th>Permissions <a class="help" href="/wiki/accounts#permissions" aria-label="Help: permissions">?</a></th><th>Joined</th><th><span class="visually-hidden">Actions</span></th></tr>
     </thead>
     <tbody>
       {% for row in users %}
@@ -57,7 +57,7 @@
   </table>
 </section>
 <section class="panel">
-  <h2>Invite someone</h2>
+  <h2>Invite someone <a class="help" href="/wiki/accounts#joining" aria-label="Help: invites">?</a></h2>
   <form method="post" action="/admin/invites" class="inline-form">
     <label>Role
       <select name="role"><option value="member">Member</option><option value="admin">Admin</option></select>

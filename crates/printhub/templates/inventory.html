@@ -3,7 +3,7 @@
 {% block content %}
 <section class="panel">
   <div class="card-head">
-    <h1>Trays</h1>
+    <h1>Trays <a class="help" href="/wiki/filament/trays" aria-label="Help: trays">?</a></h1>
     <form method="post" action="/trays/refresh"><button class="secondary">Refresh trays</button></form>
   </div>
   {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
@@ -24,7 +24,7 @@
         <td>
           {% if let Some(spool) = row.tray.spool %}
           <a href="/spools/{{ spool.id }}">{{ spool.name }}</a> <span class="muted">{{ spool.remaining }}</span>
-          {% if spool.mismatch %}<span class="badge warn">Material mismatch</span>{% endif %}
+          {% if spool.mismatch %}<span class="badge warn">Material mismatch</span><a class="help" href="/wiki/filament/trays#material-mismatch" aria-label="Help: material mismatch">?</a>{% endif %}
           {% else %}
           <span class="muted">None</span>
           {% endif %}
@@ -52,7 +52,7 @@
 </section>
 <section class="panel">
   <div class="card-head">
-    <h2>Spools</h2>
+    <h2>Spools <a class="help" href="/wiki/filament/spools" aria-label="Help: spools">?</a></h2>
     <a href="/spools/new">Add a spool</a>
   </div>
   {% if spools.is_empty() %}

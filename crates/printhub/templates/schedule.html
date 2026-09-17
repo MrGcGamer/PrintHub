@@ -2,7 +2,7 @@
 {% block title %}Print windows · PrintHub{% endblock %}
 {% block content %}
 <section class="panel">
-  <h1>Print windows</h1>
+  <h1>Print windows <a class="help" href="/wiki/queue/print-windows" aria-label="Help: print windows" target="_blank" rel="noopener">?</a></h1>
   {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
   <p class="muted">Times are in {{ timezone }}. No job starts inside a deny window. If any allow window exists, jobs start only inside one. A print that is already running is never paused.</p>
   {% if rules.is_empty() %}
@@ -48,7 +48,7 @@
       <input type="time" name="end" required>
     </label>
     <p class="muted">An end at or before the start runs into the next day.</p>
-    <label class="check"><input type="checkbox" name="must_finish_before"> Jobs must finish first</label>
+    <label class="check"><input type="checkbox" name="must_finish_before"> Jobs must finish first</label><a class="help" href="/wiki/queue/print-windows#must-finish-first" aria-label="Help: must finish first" target="_blank" rel="noopener">?</a>
     <p class="muted">For a deny rule, a job starts only if it should end before the window begins. For an allow rule, only if it should end before the window closes.</p>
     <button>Add rule</button>
   </form>

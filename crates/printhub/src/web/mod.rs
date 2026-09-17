@@ -6,6 +6,7 @@ mod chart;
 mod error;
 mod filament;
 mod guard;
+mod help;
 mod live;
 mod pages;
 mod queue;
@@ -214,7 +215,11 @@ pub fn router(state: AppState) -> Router {
         .route("/printer/{action}", post(live::control))
         .route("/camera/stream", get(live::camera_stream))
         .route("/camera/snapshot.jpg", get(live::camera_snapshot))
+        .route("/wiki", get(help::index))
+        .route("/wiki/search", get(help::search))
+        .route("/wiki/{*slug}", get(help::page))
         .route("/static/{file}", get(assets::serve))
+        .route("/static/wiki/{file}", get(assets::wiki_image))
         .route("/favicon.ico", get(assets::favicon))
         .route("/healthz", get(|| async { "ok" }))
         .layer(middleware::from_fn_with_state(

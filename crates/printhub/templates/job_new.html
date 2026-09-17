@@ -2,35 +2,35 @@
 {% block title %}Upload a job · PrintHub{% endblock %}
 {% block content %}
 <form method="post" action="/jobs" enctype="multipart/form-data" class="panel narrow">
-  <h1>Upload a job</h1>
+  <h1>Upload a job <a class="help" href="/wiki/queue/upload" aria-label="Help: uploading a job" target="_blank" rel="noopener">?</a></h1>
   {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-  <label>File
+  <label>File <a class="help" href="/wiki/queue/upload#model-or-g-code" aria-label="Help: model or G-code" target="_blank" rel="noopener">?</a>
     <input type="file" name="file" accept="{% if stl_enabled %}.stl,{% endif %}.gcode" required>
   </label>
   <p class="muted">{% if stl_enabled %}An STL model is sliced here for the mounted {{ nozzle }} mm nozzle, with the settings below. {% endif %}G-code must already be sliced for the Centauri Carbon 2. Up to {{ max_mb }} MB.</p>
   {% if stl_enabled %}
   <fieldset>
     <legend>Slicing a model</legend>
-    <label>Spool
+    <label>Spool <a class="help" href="/wiki/queue/upload#spool" aria-label="Help: spool" target="_blank" rel="noopener">?</a>
       <select name="spool_id">
         {% for spool in spools %}<option value="{{ spool.value }}"{% if spool.selected %} selected{% endif %}>{{ spool.name }}</option>{% endfor %}
       </select>
     </label>
-    <label>Print profile
+    <label>Print profile <a class="help" href="/wiki/queue/upload#print-profile" aria-label="Help: print profile" target="_blank" rel="noopener">?</a>
       <select name="process">
         {% for process in processes %}<option value="{{ process.value }}"{% if process.selected %} selected{% endif %}>{{ process.name }}</option>{% endfor %}
       </select>
     </label>
-    <label>Filament profile
+    <label>Filament profile <a class="help" href="/wiki/queue/upload#filament-profile" aria-label="Help: filament profile" target="_blank" rel="noopener">?</a>
       <select name="filament">
         <option value="">Match the spool's material</option>
         {% for filament in filaments %}<option value="{{ filament.value }}"{% if filament.selected %} selected{% endif %}>{{ filament.name }}</option>{% endfor %}
       </select>
     </label>
-    <label>Infill (%)
+    <label>Infill (%) <a class="help" href="/wiki/queue/upload#infill" aria-label="Help: infill" target="_blank" rel="noopener">?</a>
       <input name="infill" value="{{ infill }}" inputmode="numeric">
     </label>
-    <label class="check"><input type="checkbox" name="supports"{% if supports %} checked{% endif %}> Supports</label>
+    <label class="check"><input type="checkbox" name="supports"{% if supports %} checked{% endif %}> Supports</label><a class="help" href="/wiki/queue/upload#supports" aria-label="Help: supports" target="_blank" rel="noopener">?</a>
   </fieldset>
   {% endif %}
   <button type="submit">Upload</button>

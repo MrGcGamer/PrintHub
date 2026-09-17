@@ -97,6 +97,15 @@ reset them. Every non-GET request must pass the same-origin guard (tests send an
 header). Page outcomes are passed as fixed codes (`?done=`, `?problem=`) mapped to text, never
 as free text in the URL.
 
+**Help wiki.** Markdown pages in `crates/printhub/wiki/`, compiled in through `wiki::SOURCES`
+(slug = path, `index.md` = the directory) and photos through `wiki::IMAGES`, which carries each
+photo's licence credit. Loading refuses raw HTML, missing parents, unknown images and internal
+links or `#anchors` that lead nowhere; tests also check every file is listed and every
+`href="/wiki…"` in the templates resolves, so app pages link to help with a plain
+`<a class="help">`. Facts in pages come from the code, the bundled OrcaSlicer profiles, or
+Elegoo and Prusa pages, never from memory, and a page does not repeat what the app's own hint
+text already says.
+
 **Accounts.** Admins hold every `accounts::Permission` implicitly; members get them by grant on
 the users page. An admin can never be made a member, and the last enabled admin cannot be
 disabled. `accounts` and `jobs` functions take timestamps instead of reading the clock.

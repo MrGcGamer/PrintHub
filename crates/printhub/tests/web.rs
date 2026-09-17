@@ -478,6 +478,61 @@ async fn every_linked_icon_is_served_without_login() {
 }
 
 #[tokio::test]
+async fn help_pages_render_search_and_show_their_photos() {
+    let app = app().await;
+    let anonymous = app.get("/wiki/queue", None).await;
+    assert_eq!(anonymous.status(), StatusCode::SEE_OTHER);
+    let sam = app.member("sam").await;
+
+    let home = app.get("/wiki", Some(&sam)).await;
+    assert_eq!(home.status(), StatusCode::OK);
+    let home = home.text().await.unwrap();
+    assert!(home.contains("<h1>How PrintHub works</h1>"), "{home}");
+    assert!(home.contains(r#"href="/wiki/filament/materials/pla""#));
+
+    let pla = app
+        .get("/wiki/filament/materials/pla", Some(&sam))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(pla.contains(r#"<nav class="crumbs""#));
+    assert!(pla.contains("<table>"));
+    let photo = pla
+        .split(r#"<img src="/static/wiki/"#)
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .map(|file| format!("/static/wiki/{file}"))
+        .expect("the PLA page shows a photo");
+    assert!(pla.contains("CC BY 2.0"), "the photo is credited");
+    let image = app.get(&photo, None).await;
+    assert_eq!(image.status(), StatusCode::OK, "{photo}");
+    assert_eq!(image.headers()[CONTENT_TYPE], "image/jpeg");
+
+    let results = app
+        .get("/wiki/search?q=bed+CLEAR", Some(&sam))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(
+        results
+            .contains(r#"href="/wiki/queue/waiting#nobody-has-confirmed-that-the-bed-is-clear""#),
+        "{results}"
+    );
+    assert!(results.contains("<mark>"));
+
+    assert_eq!(
+        app.get("/wiki/no/such/page", Some(&sam)).await.status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        app.get("/static/wiki/missing.jpg", None).await.status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
 async fn invite_creates_a_member_without_admin_rights() {
     let app = app().await;
     let admin = app.login("admin", ADMIN_PASSWORD).await;
@@ -998,7 +1053,7 @@ async fn only_permitted_members_record_the_mounted_nozzle() {
     let dashboard = app.get("/", Some(&sam)).await.text().await.unwrap();
     assert!(dashboard.contains("0.4 mm"), "{dashboard}");
     assert!(
-        !dashboard.contains("/printer/nozzle"),
+        !dashboard.contains(r#"action="/printer/nozzle""#),
         "no form without the permission"
     );
     assert_eq!(record(&sam, "0.6").await, StatusCode::FORBIDDEN);
@@ -1015,7 +1070,10 @@ async fn only_permitted_members_record_the_mounted_nozzle() {
         .await;
     assert_eq!(granted.headers()[LOCATION], "/admin/users?done=permissions");
     let dashboard = app.get("/", Some(&sam)).await.text().await.unwrap();
-    assert!(dashboard.contains("/printer/nozzle"), "{dashboard}");
+    assert!(
+        dashboard.contains(r#"action="/printer/nozzle""#),
+        "{dashboard}"
+    );
     assert_eq!(record(&sam, "0.6").await, StatusCode::SEE_OTHER);
     let dashboard = app.get("/", Some(&admin)).await.text().await.unwrap();
     assert!(dashboard.contains("recorded by sam"), "{dashboard}");

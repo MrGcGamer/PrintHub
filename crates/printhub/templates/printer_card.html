@@ -1,6 +1,6 @@
 <div class="card-head">
   <h2>{{ card.state }}</h2>
-  <span class="badge {% if card.connected %}ok{% else %}warn{% endif %}">{{ card.link }}</span>
+  <span><span class="badge {% if card.connected %}ok{% else %}warn{% endif %}">{{ card.link }}</span><a class="help" href="/wiki/printer#connection" aria-label="Help: printer connection">?</a></span>
 </div>
 {% if let Some(progress) = card.progress %}
 <progress max="100" value="{{ progress }}">{{ progress }}%</progress>
@@ -12,7 +12,7 @@
 </dl>
 {% endif %}
 <dl class="facts">
-  <dt>Nozzle size</dt><dd>{{ card.nozzle_size }} <span class="muted">({{ card.nozzle_note }})</span></dd>
+  <dt>Nozzle size</dt><dd>{{ card.nozzle_size }} <span class="muted">({{ card.nozzle_note }})</span><a class="help" href="/wiki/printer/nozzle" aria-label="Help: mounted nozzle">?</a></dd>
   {% if let Some(nozzle) = card.nozzle %}<dt>Nozzle</dt><dd>{{ nozzle }}</dd>{% endif %}
   {% if let Some(bed) = card.bed %}<dt>Bed</dt><dd>{{ bed }}</dd>{% endif %}
 </dl>
@@ -27,7 +27,7 @@
     {% if let Some(spool) = tray.spool %}
     <a href="/spools/{{ spool.id }}">{{ spool.name }}</a>
     <span class="muted">{{ spool.remaining }}</span>
-    {% if spool.mismatch %}<span class="badge warn">Material mismatch</span>{% endif %}
+    {% if spool.mismatch %}<span class="badge warn">Material mismatch</span><a class="help" href="/wiki/filament/trays#material-mismatch" aria-label="Help: material mismatch">?</a>{% endif %}
     {% endif %}
   </li>
   {% endfor %}
@@ -41,5 +41,6 @@
   <button hx-post="/printer/pause" hx-target="#control-result">Pause</button>
   {% endif %}
   <button class="danger" hx-post="/printer/stop" hx-target="#control-result" hx-confirm="Stop the current print? It cannot be resumed.">Stop</button>
+  <a class="help" href="/wiki/printer#pause-resume-and-stop" aria-label="Help: pause, resume and stop">?</a>
 </div>
 {% endif %}

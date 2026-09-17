@@ -2,9 +2,9 @@
 {% block title %}{{ heading }} · PrintHub{% endblock %}
 {% block content %}
 <form method="post" action="{{ action }}" class="panel narrow">
-  <h1>{{ heading }}</h1>
+  <h1>{{ heading }} <a class="help" href="/wiki/filament/spools#fields" aria-label="Help: spool fields" target="_blank" rel="noopener">?</a></h1>
   {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-  <label>Material
+  <label>Material <a class="help" href="/wiki/filament#material-names" aria-label="Help: material names" target="_blank" rel="noopener">?</a>
     <input name="material" value="{{ form.material }}" list="materials" maxlength="64" autocomplete="off" required>
   </label>
   <datalist id="materials">
@@ -22,11 +22,11 @@
   <label>Filament on a full spool (g)
     <input name="initial_grams" value="{{ form.initial_grams }}" inputmode="decimal" required>
   </label>
-  <label>Price <span class="muted">(optional)</span>
+  <label>Price <span class="muted">(optional)</span> <a class="help" href="/wiki/stats/balances#where-a-debt-comes-from" aria-label="Help: price and balances" target="_blank" rel="noopener">?</a>
     <input name="price" value="{{ form.price }}" inputmode="decimal">
   </label>
   {% if !owners.is_empty() %}
-  <label>Owner
+  <label>Owner <a class="help" href="/wiki/filament/spools#owners" aria-label="Help: owners" target="_blank" rel="noopener">?</a>
     <select name="owner_id">
       <option value="">Shared</option>
       {% for owner in owners %}<option value="{{ owner.id }}"{% if owner.selected %} selected{% endif %}>{{ owner.username }}</option>{% endfor %}

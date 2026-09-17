@@ -3,7 +3,7 @@
 {% block content %}
 <section class="panel">
   <div class="card-head">
-    <h1>Statistics</h1>
+    <h1>Statistics <a class="help" href="/wiki/stats" aria-label="Help: statistics">?</a></h1>
     <nav class="periods" aria-label="Period">
       {% for link in periods %}<a href="{{ link.href }}"{% if link.current %} aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}
     </nav>
@@ -16,7 +16,7 @@
   {% if people.is_empty() %}
   <p class="muted">Nothing was printed in this period.</p>
   {% else %}
-  <h2>People</h2>
+  <h2>People <a class="help" href="/wiki/stats#what-counts-as-a-print" aria-label="Help: what counts as a print">?</a></h2>
   <div class="table-scroll">
     <table>
       <thead>
@@ -51,7 +51,7 @@
 {% endif %}
 {% if !matrix.rows.is_empty() %}
 <section class="panel">
-  <h2>Whose filament</h2>
+  <h2>Whose filament <a class="help" href="/wiki/stats#filament" aria-label="Help: whose filament">?</a></h2>
   <p class="muted">Each row is who printed, each column whose spools they used.</p>
   <div class="table-scroll">
     <table>
@@ -66,7 +66,7 @@
 </section>
 {% endif %}
 <section class="panel" id="balances">
-  <h2>Balances</h2>
+  <h2>Balances <a class="help" href="/wiki/stats/balances" aria-label="Help: balances">?</a></h2>
   <p class="muted">Over all time: filament used from other people's spools that have a price, less what was paid back.</p>
   {% if debts.is_empty() %}
   <p class="muted">Nobody owes anybody anything.</p>
@@ -97,7 +97,7 @@
   <p class="muted">Whoever received a payment records it, or an admin.</p>
   {% endif %}
   {% if !payments.is_empty() %}
-  <h2>Payments</h2>
+  <h2>Payments <a class="help" href="/wiki/stats/balances#recording-a-payment" aria-label="Help: payments">?</a></h2>
   <table>
     <thead><tr><th>When</th><th>Paid</th><th class="num">Amount</th><th>Recorded by</th>{% if can_delete_payments %}<th><span class="visually-hidden">Actions</span></th>{% endif %}</tr></thead>
     <tbody>
@@ -118,7 +118,7 @@
 <div class="grid stats-grid">
   {% if !materials.is_empty() %}
   <section class="panel">
-    <h2>Materials</h2>
+    <h2>Materials <a class="help" href="/wiki/stats#materials" aria-label="Help: materials">?</a></h2>
     <table>
       <tbody>{% for row in materials %}<tr><td>{{ row.label }}</td><td class="num">{{ row.grams }}</td></tr>{% endfor %}</tbody>
     </table>
@@ -126,7 +126,7 @@
   {% endif %}
   {% if !unaccounted.is_empty() %}
   <section class="panel">
-    <h2>Not accounted for</h2>
+    <h2>Not accounted for <a class="help" href="/wiki/stats#not-accounted-for" aria-label="Help: not accounted for">?</a></h2>
     <p class="muted">What weigh-ins found beyond what prints recorded, by spool owner. Missing filament went into prints started without PrintHub, purges, or spools that were already used when added.</p>
     <table>
       <tbody>{% for row in unaccounted %}<tr><td>{{ row.label }}</td><td class="num">{{ row.grams }}</td><td class="num">{{ row.value }}</td></tr>{% endfor %}</tbody>

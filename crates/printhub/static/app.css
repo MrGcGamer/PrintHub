@@ -247,3 +247,48 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .series-7 { fill: var(--series-7); background: var(--series-7); }
 .series-8 { fill: var(--series-8); background: var(--series-8); }
 .series-other { fill: var(--series-other); background: var(--series-other); }
+
+.help {
+  display: inline-grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-left: 0.35rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+.wiki { display: grid; gap: 1.25rem; grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr); align-items: start; }
+@media (max-width: 48rem) { .wiki { grid-template-columns: minmax(0, 1fr); } }
+.wiki .panel + .panel { margin-top: 0; }
+.wiki-nav input { margin: 0 0 0.9rem; }
+.wiki-nav label { margin: 0; }
+.wiki-nav ul { list-style: none; margin: 0.25rem 0 0; padding: 0 0 0 0.9rem; }
+.wiki-nav > nav > ul { padding: 0; }
+.wiki-nav li { margin: 0.2rem 0; }
+.wiki-nav summary { cursor: pointer; }
+.wiki-nav a[aria-current] { color: var(--text); font-weight: 700; text-decoration: none; }
+.crumbs { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.5rem; }
+.wiki-page { max-width: 48rem; }
+.wiki-page h2 { margin-top: 1.75rem; }
+.wiki-page h3 { margin: 1.25rem 0 0.5rem; font-size: 1.05rem; }
+.wiki-page table { margin: 0.75rem 0; }
+.wiki-page td, .wiki-page th { vertical-align: top; }
+.wiki-page blockquote { margin: 1rem 0; padding: 0.5rem 1rem; border-left: 4px solid var(--warn); background: var(--bg); border-radius: 0 8px 8px 0; }
+.wiki-page code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em; }
+.gallery { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); margin: 1rem 0; }
+.gallery figure { margin: 0; }
+.gallery img { display: block; width: 100%; height: auto; border-radius: 8px; }
+.gallery figcaption { font-size: 0.85rem; margin-top: 0.35rem; }
+.wiki-children dt { font-weight: 600; margin-top: 0.6rem; }
+.wiki-children dd { margin: 0; color: var(--muted); }
+.hits { padding-left: 1.25rem; }
+.hits li { margin: 0 0 1rem; }
+.hits p { margin: 0.25rem 0 0; }
+mark { background: color-mix(in srgb, var(--accent) 25%, transparent); color: inherit; border-radius: 3px; padding: 0 0.1em; }
+.inline-form > .help { margin-bottom: 0.6rem; }

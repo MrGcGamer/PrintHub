@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · Help · PrintHub{% endblock %}
+{% block content %}
+<div class="wiki">
+  {% include "wiki_nav.html" %}
+  <article class="panel wiki-page" id="wiki-main">
+    {% if !crumbs.is_empty() %}
+    <nav class="crumbs" aria-label="Breadcrumb">{% for crumb in crumbs %}<a href="{{ crumb.href }}">{{ crumb.title }}</a> › {% endfor %}</nav>
+    {% endif %}
+    <h1>{{ title }}</h1>
+    {% for section in body %}
+    {{ section.html|safe }}
+    {% if !section.gallery.is_empty() %}
+    <div class="gallery">
+      {% for figure in section.gallery %}
+      <figure>
+        <img src="/static/wiki/{{ figure.image.file }}" alt="{{ figure.alt }}" width="{{ figure.image.width }}" height="{{ figure.image.height }}" loading="lazy">
+        <figcaption>{% if !figure.caption.is_empty() %}{{ figure.caption }}. {% endif %}<span class="muted">Photo: <a href="{{ figure.image.source_url }}" rel="noopener">{{ figure.image.author }}</a>, <a href="{{ figure.image.license_url }}" rel="noopener license">{{ figure.image.license }}</a></span></figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% if !children.is_empty() %}
+    <h2 id="in-this-section">In this section</h2>
+    <dl class="wiki-children">
+      {% for child in children %}<dt><a href="{{ child.href }}">{{ child.title }}</a></dt><dd>{{ child.summary }}</dd>{% endfor %}
+    </dl>
+    {% endif %}
+  </article>
+</div>
+{% endblock %}

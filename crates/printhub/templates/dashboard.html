@@ -13,13 +13,14 @@
         </select>
       </label>
       <button class="secondary">Record</button>
+      <a class="help" href="/wiki/printer/nozzle" aria-label="Help: mounted nozzle">?</a>
     </form>
     {% endif %}
   </section>
   <section class="panel camera">
     {% if camera_enabled %}
     <img src="/camera/stream" alt="Live view of the printer">
-    <p class="muted"><a href="/camera/snapshot.jpg" target="_blank" rel="noopener">Open a still image</a></p>
+    <p class="muted"><a href="/camera/snapshot.jpg" target="_blank" rel="noopener">Open a still image</a> <a class="help" href="/wiki/printer#camera" aria-label="Help: camera">?</a></p>
     {% else %}
     <p class="muted">The camera is turned off.</p>
     {% endif %}

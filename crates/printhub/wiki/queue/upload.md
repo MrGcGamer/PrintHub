@@ -1,0 +1,58 @@
+---
+title: Uploading a job
+summary: Model or G-code, and what each slicing setting does.
+keywords: upload, stl, gcode, g-code, 3mf, slice, slicer, orcaslicer, print profile, filament profile, infill, supports, layer height, file size, multicolour, multi-colour
+order: 1
+---
+## Model or G-code
+
+**An STL model** is sliced by PrintHub with OrcaSlicer and Elegoo's Centauri Carbon 2 profiles
+for the [mounted nozzle](/wiki/printer/nozzle). It prints in one filament with the settings
+below; use it when those are enough.
+
+**G-code** you slice yourself. Use it for everything else: several colours or materials, custom
+supports, modifiers, settings the form lacks. It has to say how many grams of filament it uses,
+as slicers normally write, because the grams are what PrintHub matches against the spools.
+
+A multi-colour print purges filament at every colour change, because the Centauri Carbon 2 feeds
+every colour through one nozzle. Fewer colour changes waste less.
+
+Other file types, such as 3MF projects, are not accepted. If the form offers no slicing settings,
+this PrintHub cannot slice and takes G-code only.
+
+## Slicing settings
+
+### Spool
+
+The spool you mean to print with. Its material picks the filament profile, unless you choose
+one, and its colour colours the sliced model. Confirming the job preselects it.
+
+> Choosing a spool of a different material when confirming does not slice the model again: it
+> still prints at the temperatures of the first spool's profile.
+
+### Print profile
+
+Elegoo's print settings for the mounted nozzle. The name starts with the layer height: thinner
+layers show less of the stepped surface and take longer. *Standard* is chosen by default.
+
+### Filament profile
+
+The temperatures, fan and flow for the material. *Match the spool's material* looks for the
+Elegoo profile named exactly like the spool's material, so a spool of `PETG` prints with
+*Elegoo PETG @ECC2*. When no profile has that name, the upload asks you to choose one.
+
+Choose one yourself for anything Elegoo makes a separate profile for, such as a silk or matte
+PLA or a *Rapid* filament, and use a *Generic* profile for materials Elegoo has none for. The
+[material pages](/wiki/filament/materials) list each profile's settings.
+
+### Infill
+
+How much of the inside is filled, in percent. 0 leaves only the walls, top and bottom; 100 is
+solid. More infill makes a part heavier and slower to print, and past a point stronger walls
+help more than more infill, but wall counts can only be changed in G-code you slice yourself.
+
+### Supports
+
+Adds removable scaffolding under overhangs that would otherwise print in mid-air. Leave it off
+for models designed to print without it: supports cost filament and time, and leave marks where
+they touched.

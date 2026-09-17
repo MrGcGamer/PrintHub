@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Search · Help · PrintHub{% endblock %}
+{% block content %}
+<div class="wiki">
+  {% include "wiki_nav.html" %}
+  <section class="panel wiki-page" id="wiki-main">
+    <h1>Search the help</h1>
+    {% if query.trim().is_empty() %}
+    <p class="muted">Type a word, such as nozzle, PETG or balance.</p>
+    {% else if hits.is_empty() %}
+    <p>Nothing matches “{{ query }}”. Every word has to appear on a page; try fewer.</p>
+    {% else %}
+    <ol class="hits" aria-label="Results">
+      {% for hit in hits %}
+      <li>
+        <a href="{{ hit.href }}">{{ hit.title }}</a>{% if !hit.place.is_empty() %} <span class="muted">{{ hit.place }}</span>{% endif %}
+        <p>{% for snip in hit.snippet %}{% if snip.mark %}<mark>{{ snip.text }}</mark>{% else %}{{ snip.text }}{% endif %}{% endfor %}</p>
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

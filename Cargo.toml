@@ -18,6 +18,8 @@ futures = "0.3.34"
 getrandom = "0.4.3"
 jiff = "0.2.37"
 md-5 = "0.11.0"
+# Without the default `getopts`, which only the command-line renderer uses.
+pulldown-cmark = { version = "0.13.4", default-features = false, features = ["html"] }
 # Printer endpoints are plain HTTP and MQTT, so both clients are built without TLS.
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "stream"] }
 rumqttc = { version = "0.25.1", default-features = false }

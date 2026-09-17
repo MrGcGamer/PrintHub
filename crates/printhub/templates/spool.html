@@ -22,11 +22,12 @@
       <input type="hidden" name="archived" value="{% if spool.archived %}false{% else %}true{% endif %}">
       <button class="secondary">{% if spool.archived %}Restore{% else %}Archive{% endif %}</button>
     </form>
+    <a class="help" href="/wiki/filament/spools#archiving" aria-label="Help: archiving">?</a>
   </div>
   {% endif %}
 </section>
 <section class="panel">
-  <h2>Weigh in</h2>
+  <h2>Weigh in <a class="help" href="/wiki/filament/weighing#weigh-ins" aria-label="Help: weigh-ins">?</a></h2>
   {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/spools/{{ spool.id }}/weigh" class="inline-form">
     <label>Filament left (g)
@@ -35,7 +36,7 @@
     <button>Record</button>
   </form>
   <p class="muted">Weigh the spool and subtract the weight of the empty spool.</p>
-  <h2>History</h2>
+  <h2>History <a class="help" href="/wiki/filament/weighing#how-prints-use-filament" aria-label="Help: how prints use filament">?</a></h2>
   {% if history.is_empty() %}
   <p class="muted">Nothing recorded yet.</p>
   {% else %}
