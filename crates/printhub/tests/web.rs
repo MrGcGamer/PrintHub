@@ -902,8 +902,8 @@ async fn gcode_job_prints_from_its_spool_and_deducts_filament() {
     assert!((left - (1000.0 - 3.54)).abs() < 1e-9, "{left}");
 }
 
-/// A stand-in OrcaSlicer that copies the cube fixture to `--outputdir` and keeps the filament
-/// profile it was given.
+/// A stand-in OrcaSlicer that copies the cube fixture to `--outputdir` and keeps the process and
+/// filament profiles it was given.
 #[cfg(unix)]
 fn stub_slicer() -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
@@ -914,9 +914,10 @@ fn stub_slicer() -> PathBuf {
         format!(
             "#!/bin/sh\n\
              while [ $# -gt 0 ]; do\n\
-               case \"$1\" in --outputdir) out=$2;; --load-filaments) fil=$2;; esac\n\
+               case \"$1\" in --outputdir) out=$2;; --load-settings) set=$2;; --load-filaments) fil=$2;; esac\n\
                shift\n\
              done\n\
+             cp \"${{set##*;}}\" \"$(dirname \"$0\")/process.json\"\n\
              cp \"$fil\" \"$(dirname \"$0\")/filament.json\"\n\
              cp '{CUBE_GCODE}' \"$out/plate_1.gcode\"\n"
         ),
@@ -964,6 +965,10 @@ async fn stl_uploads_are_sliced_for_the_chosen_spool() {
 
     let form = app.get("/jobs/new", Some(&sam)).await.text().await.unwrap();
     assert!(form.contains(PROCESS), "{form}");
+    assert!(
+        form.contains(r#"<option value="Textured PEI Plate" selected>"#),
+        "{form}"
+    );
 
     let no_spool = app
         .upload(
@@ -974,12 +979,33 @@ async fn stl_uploads_are_sliced_for_the_chosen_spool() {
         )
         .await;
     assert_eq!(no_spool.status(), StatusCode::BAD_REQUEST);
+    let no_plate = app
+        .upload(
+            &sam,
+            &[
+                ("spool_id", spool.as_str()),
+                ("process", PROCESS),
+                ("infill", "20"),
+            ],
+            "cube.stl",
+            model,
+        )
+        .await;
+    assert_eq!(no_plate.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        no_plate
+            .text()
+            .await
+            .unwrap()
+            .contains("Choose the build plate.")
+    );
 
     let uploaded = app
         .upload(
             &sam,
             &[
                 ("spool_id", spool.as_str()),
+                ("plate", "High Temp Plate"),
                 ("process", PROCESS),
                 ("filament", ""),
                 ("infill", "20"),
@@ -1010,6 +1036,15 @@ async fn stl_uploads_are_sliced_for_the_chosen_spool() {
         serde_json::from_slice(&std::fs::read(binary.with_file_name("filament.json")).unwrap())
             .unwrap();
     assert_eq!(filament["filament_colour"], serde_json::json!(["#2850DF"]));
+    let process: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(binary.with_file_name("process.json")).unwrap())
+            .unwrap();
+    assert_eq!(process["curr_bed_type"], "High Temp Plate");
+    assert_eq!(
+        job.plate.as_deref(),
+        Some("Cool Plate"),
+        "read from the G-code, here the stub's fixture"
+    );
 
     let kim = app.member("kim").await;
     let cancel = format!("/jobs/{job_id}/cancel");
@@ -1243,6 +1278,7 @@ async fn statistics_show_whose_filament_was_used_and_what_is_owed() {
         generator: String::new(),
         printer_model: String::new(),
         nozzle: String::new(),
+        plate: String::new(),
         estimated_seconds: Some(1800),
         layers: Some(10),
         tools: vec![gcode::ToolUse {

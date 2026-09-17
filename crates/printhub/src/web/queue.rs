@@ -28,7 +28,7 @@ use crate::{
     inventory::{self, Spool},
     jobs::{self, Job, JobState, NewJob, Source},
     schedule::{self, Rule, RuleKind},
-    slicer::{self, SliceSettings},
+    slicer::{self, Plate, SliceSettings},
     store,
 };
 
@@ -143,6 +143,7 @@ struct NewJobPage {
     nozzle: &'static str,
     max_mb: u64,
     spools: Vec<Choice>,
+    plates: Vec<Choice>,
     processes: Vec<Choice>,
     filaments: Vec<Choice>,
     supports: bool,
@@ -209,6 +210,18 @@ async fn new_job_form(
             selected: field("spool_id") == spool.id.to_string(),
         })
         .collect();
+    let plates = Plate::ALL
+        .into_iter()
+        .enumerate()
+        .map(|(i, plate)| Choice {
+            value: plate.as_str().to_owned(),
+            name: plate.as_str().to_owned(),
+            selected: match Plate::parse(field("plate")) {
+                Some(wanted) => wanted == plate,
+                None => i == 0,
+            },
+        })
+        .collect();
     let status = if error.is_some() {
         StatusCode::BAD_REQUEST
     } else {
@@ -220,6 +233,7 @@ async fn new_job_form(
         nozzle: nozzle.as_str(),
         max_mb: state.config.max_upload_bytes / (1024 * 1024),
         spools,
+        plates,
         processes,
         filaments,
         supports: fields.contains_key("supports"),
@@ -428,6 +442,8 @@ async fn create_stl_job(
     }
     .filter(|spool| !spool.archived)
     .ok_or_else(|| user_problem("Choose the spool to print with."))?;
+    let plate =
+        Plate::parse(field("plate")).ok_or_else(|| user_problem("Choose the build plate."))?;
 
     // Read once, so the profiles checked here are the ones the model is sliced with.
     let nozzle = state.nozzle.borrow().nozzle;
@@ -470,6 +486,7 @@ async fn create_stl_job(
     place(temp, &jobs::model_path(&state.config.data_dir, id)).await?;
     let settings = SliceSettings {
         nozzle,
+        plate,
         process: process.to_owned(),
         filament,
         color_hex: spool.color_hex.clone(),
@@ -525,6 +542,7 @@ struct JobView {
     state: &'static str,
     source: &'static str,
     sliced_for: Option<String>,
+    plate: Option<String>,
     settings: Option<String>,
     estimate: String,
     error: String,
@@ -652,6 +670,7 @@ async fn job_detail(
             owner: owner_name(&job),
             state: job.state.label(),
             sliced_for: job.nozzle_mm.map(|mm| format!("{mm} mm")),
+            plate: job.plate.clone(),
             source: match job.source {
                 Source::Stl => "Model, sliced here",
                 Source::Gcode => "G-code",

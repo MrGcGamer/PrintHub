@@ -109,17 +109,22 @@ impl ProfileLibrary {
 
     /// Selectable profiles of `kind` (`process` or `filament`) that name `machine` as
     /// compatible, sorted by name.
+    ///
+    /// `compatible_printers` counts when inherited: Elegoo's Fine and Draft processes take it
+    /// from Standard. `instantiation` is read from the profile's own file, because parents are
+    /// marked `false`. Profiles that cannot be flattened are left out.
     pub fn compatible(&self, kind: &str, machine: &str) -> Vec<String> {
         let mut names: Vec<String> = self
             .profiles
             .iter()
-            .filter(|(_, profile)| {
+            .filter(|(name, profile)| {
                 profile.get("type").and_then(Value::as_str) == Some(kind)
                     && profile.get("instantiation").and_then(Value::as_str) == Some("true")
-                    && profile
-                        .get("compatible_printers")
-                        .and_then(Value::as_array)
-                        .is_some_and(|printers| printers.iter().any(|p| p == machine))
+                    && self.flatten(name).is_ok_and(|flat| {
+                        flat.get("compatible_printers")
+                            .and_then(Value::as_array)
+                            .is_some_and(|printers| printers.iter().any(|p| p == machine))
+                    })
             })
             .map(|(name, _)| name.clone())
             .collect();
@@ -128,9 +133,34 @@ impl ProfileLibrary {
     }
 }
 
+/// A build plate the Centauri Carbon 2 takes. Filament profiles set a bed temperature per plate
+/// type, and the CLI slices for OrcaSlicer's Cool Plate unless told otherwise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Plate {
+    TexturedPei,
+    HighTemp,
+}
+
+impl Plate {
+    pub const ALL: [Self; 2] = [Self::TexturedPei, Self::HighTemp];
+
+    /// OrcaSlicer's name for the plate type, as `curr_bed_type` takes it and G-code records it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TexturedPei => "Textured PEI Plate",
+            Self::HighTemp => "High Temp Plate",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|plate| plate.as_str() == raw)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SliceSettings {
     pub nozzle: Nozzle,
+    pub plate: Plate,
     pub process: String,
     pub filament: String,
     /// `#RRGGBB`. Recorded in the G-code, where the printer's own screen shows it.
@@ -182,6 +212,7 @@ impl Slicer {
         let machine = self.library.flatten(&machine_name(settings.nozzle))?;
         let mut process = self.library.flatten(&settings.process)?;
         let mut filament = self.library.flatten(&settings.filament)?;
+        process.insert("curr_bed_type".into(), Value::from(settings.plate.as_str()));
         process.insert(
             "enable_support".into(),
             Value::from(if settings.supports { "1" } else { "0" }),
@@ -373,6 +404,21 @@ mod tests {
         );
         write(
             &dir,
+            "process/ECC2/fine.json",
+            json!({"name": "0.12mm Fine @Elegoo CC2 0.4 nozzle", "type": "process", "inherits": "0.20mm Standard @Elegoo CC2 0.4 nozzle", "instantiation": "true"}),
+        );
+        write(
+            &dir,
+            "process/ECC2/common.json",
+            json!({"name": "fdm_process_cc2_common", "type": "process", "instantiation": "false", "compatible_printers": [MACHINE]}),
+        );
+        write(
+            &dir,
+            "process/ECC2/orphan.json",
+            json!({"name": "0.20mm Orphan @Elegoo CC2 0.4 nozzle", "type": "process", "inherits": "missing", "instantiation": "true", "compatible_printers": [MACHINE]}),
+        );
+        write(
+            &dir,
             "process/ECC2/other.json",
             json!({"name": "0.20mm Standard @Other", "type": "process", "instantiation": "true", "compatible_printers": ["Other printer"]}),
         );
@@ -424,7 +470,11 @@ mod tests {
         let library = ProfileLibrary::load(&vendor()).unwrap();
         assert_eq!(
             library.compatible("process", MACHINE),
-            ["0.20mm Standard @Elegoo CC2 0.4 nozzle"]
+            [
+                "0.12mm Fine @Elegoo CC2 0.4 nozzle",
+                "0.20mm Standard @Elegoo CC2 0.4 nozzle"
+            ],
+            "inherited compatibility counts; parents and unresolvable profiles are left out"
         );
         assert_eq!(
             library.compatible("filament", MACHINE),
@@ -435,6 +485,7 @@ mod tests {
     fn settings() -> SliceSettings {
         SliceSettings {
             nozzle: Nozzle::Mm04,
+            plate: Plate::HighTemp,
             process: "0.20mm Standard @Elegoo CC2 0.4 nozzle".into(),
             filament: "Elegoo PLA @ECC2".into(),
             color_hex: "#2850DF".into(),
@@ -491,6 +542,7 @@ mod tests {
         assert_eq!(machine["from"], "system");
         assert_eq!(machine["gcode_flavor"], "klipper");
         assert_eq!(machine["printable_height"], "100");
+        assert_eq!(process["curr_bed_type"], "High Temp Plate");
         assert_eq!(process["enable_support"], "1");
         assert_eq!(process["sparse_infill_density"], "25%");
         assert_eq!(process["wall_loops"], "2");
@@ -568,30 +620,41 @@ mod tests {
             Duration::from_secs(300),
         )
         .unwrap();
-        assert!(
-            slicer
-                .processes(Nozzle::Mm04)
-                .iter()
-                .any(|p| p == "0.20mm Standard @Elegoo CC2 0.4 nozzle")
-        );
+        let processes = slicer.processes(Nozzle::Mm04);
+        for process in [
+            "0.20mm Standard @Elegoo CC2 0.4 nozzle",
+            "0.12mm Fine @Elegoo CC2 0.4 nozzle",
+        ] {
+            assert!(processes.iter().any(|p| p == process), "{processes:?}");
+        }
         let work = scratch("real");
         let model = work.join("cube.stl");
         std::fs::write(&model, cube_stl(20.0)).unwrap();
-        let gcode = slicer
-            .slice(
-                &model,
-                &work,
-                &SliceSettings {
-                    filament: "Elegoo PLA @ECC2".into(),
-                    color_hex: "#2850DF".into(),
-                    supports: false,
-                    infill_percent: 15,
-                    ..settings()
-                },
-            )
-            .await
-            .unwrap();
-        let info = crate::gcode::read(&gcode).await.unwrap();
+        let slice = |dir: &str, settings: SliceSettings| {
+            let (slicer, model, workdir) = (&slicer, &model, work.join(dir));
+            async move {
+                let gcode = slicer.slice(model, &workdir, &settings).await.unwrap();
+                let text = std::fs::read_to_string(&gcode).unwrap();
+                let bed = text
+                    .lines()
+                    .find_map(|line| line.strip_prefix("M190 S"))
+                    .map(|rest| rest.split_whitespace().next().unwrap().to_owned());
+                (crate::gcode::read(&gcode).await.unwrap(), bed)
+            }
+        };
+
+        let (info, bed) = slice(
+            "pla",
+            SliceSettings {
+                plate: Plate::TexturedPei,
+                filament: "Elegoo PLA @ECC2".into(),
+                color_hex: "#2850DF".into(),
+                supports: false,
+                infill_percent: 15,
+                ..settings()
+            },
+        )
+        .await;
         assert_eq!(info.printer_model, "Elegoo Centauri Carbon 2");
         assert_eq!(info.tools.len(), 1);
         assert_eq!(info.tools[0].color, "#2850DF");
@@ -599,5 +662,25 @@ mod tests {
             info.tools[0].grams > 1.0,
             "density came through the flattened chain"
         );
+        assert_eq!(info.plate, "Textured PEI Plate");
+        assert_eq!(bed.as_deref(), Some("60"));
+
+        // Elegoo's PET-CF profile heats the two plates differently.
+        for (plate, temperature) in [(Plate::TexturedPei, "100"), (Plate::HighTemp, "70")] {
+            let (info, bed) = slice(
+                plate.as_str(),
+                SliceSettings {
+                    plate,
+                    process: "0.12mm Fine @Elegoo CC2 0.4 nozzle".into(),
+                    filament: "Elegoo PET-CF @ECC2".into(),
+                    supports: false,
+                    ..settings()
+                },
+            )
+            .await;
+            assert_eq!(info.plate, plate.as_str());
+            assert_eq!(bed.as_deref(), Some(temperature), "{plate:?}");
+            assert_eq!(info.layers, Some(166), "0.12 mm layers over 20 mm");
+        }
     }
 }

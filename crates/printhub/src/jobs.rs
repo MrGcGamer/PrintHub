@@ -130,6 +130,8 @@ pub struct Job {
     pub finished_at: Option<i64>,
     /// The nozzle diameter the G-code was sliced for, when it names one.
     pub nozzle_mm: Option<f64>,
+    /// The build plate type the G-code was sliced for, when it names one.
+    pub plate: Option<String>,
 }
 
 impl Job {
@@ -288,6 +290,7 @@ struct JobRow {
     started_at: Option<i64>,
     finished_at: Option<i64>,
     nozzle_mm: Option<f64>,
+    plate: Option<String>,
 }
 
 impl From<JobRow> for Job {
@@ -317,6 +320,7 @@ impl From<JobRow> for Job {
             started_at: row.started_at,
             finished_at: row.finished_at,
             nozzle_mm: row.nozzle_mm,
+            plate: row.plate,
         }
     }
 }
@@ -327,7 +331,8 @@ pub async fn get(db: &Db, id: i64) -> Result<Option<Job>, JobError> {
         r#"SELECT j.id AS "id!", j.owner_id, u.username AS "owner_name?", j.name, j.source,
                   j.state, j.position, j.process_profile, j.filament_profile, j.supports,
                   j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
-                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm
+                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm,
+                  j.plate
            FROM jobs j LEFT JOIN users u ON u.id = j.owner_id
            WHERE j.id = ?"#,
         id,
@@ -344,7 +349,8 @@ pub async fn list(db: &Db, finished: i64) -> Result<Vec<Job>, JobError> {
         r#"SELECT j.id AS "id!", j.owner_id, u.username AS "owner_name?", j.name, j.source,
                   j.state, j.position, j.process_profile, j.filament_profile, j.supports,
                   j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
-                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm
+                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm,
+                  j.plate
            FROM jobs j LEFT JOIN users u ON u.id = j.owner_id
            WHERE j.state NOT IN ('done', 'failed', 'cancelled')
               OR j.id IN (SELECT id FROM jobs WHERE state IN ('done', 'failed', 'cancelled')
@@ -369,7 +375,8 @@ pub async fn in_state(db: &Db, state: JobState) -> Result<Vec<Job>, JobError> {
         r#"SELECT j.id AS "id!", j.owner_id, u.username AS "owner_name?", j.name, j.source,
                   j.state, j.position, j.process_profile, j.filament_profile, j.supports,
                   j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
-                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm
+                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm,
+                  j.plate
            FROM jobs j LEFT JOIN users u ON u.id = j.owner_id
            WHERE j.state = ?
            ORDER BY j.position, j.id"#,
@@ -402,8 +409,9 @@ pub async fn tools(db: &Db, job_id: i64) -> Result<Vec<JobTool>, JobError> {
         .collect())
 }
 
-/// Records what the G-code needs: the estimate, its nozzle and one row per tool that uses filament. With
-/// `spool_id`, every tool is assigned that spool, as when the job was sliced for it.
+/// Records what the G-code needs: the estimate, its nozzle and plate, and one row per tool that
+/// uses filament. With `spool_id`, every tool is assigned that spool, as when the job was sliced
+/// for it.
 pub async fn store_gcode_info(
     db: &Db,
     job_id: i64,
@@ -412,11 +420,14 @@ pub async fn store_gcode_info(
 ) -> Result<(), JobError> {
     let mut tx = db.begin().await?;
     let nozzle_mm = info.nozzle_mm();
+    let plate = (!info.plate.is_empty()).then_some(info.plate.as_str());
     sqlx::query!(
-        "UPDATE jobs SET estimated_seconds = ?, layers = ?, nozzle_mm = ? WHERE id = ?",
+        "UPDATE jobs SET estimated_seconds = ?, layers = ?, nozzle_mm = ?, plate = ?
+         WHERE id = ?",
         info.estimated_seconds,
         info.layers,
         nozzle_mm,
+        plate,
         job_id,
     )
     .execute(&mut *tx)
@@ -1045,6 +1056,7 @@ mod tests {
             generator: String::new(),
             printer_model: String::new(),
             nozzle: String::new(),
+            plate: String::new(),
             estimated_seconds: Some(600),
             layers: Some(10),
             tools: grams
@@ -1244,6 +1256,7 @@ mod tests {
             started_at: None,
             finished_at: None,
             nozzle_mm: None,
+            plate: None,
         }
     }
 
@@ -1424,9 +1437,12 @@ mod tests {
         let id = create(&db, &gcode_job(sam), 60).await.unwrap();
         let sliced = GcodeInfo {
             nozzle: "0.4".into(),
+            plate: "High Temp Plate".into(),
             ..info(&[5.0])
         };
         store_gcode_info(&db, id, &sliced, None).await.unwrap();
-        assert_eq!(get(&db, id).await.unwrap().unwrap().nozzle_mm, Some(0.4));
+        let job = get(&db, id).await.unwrap().unwrap();
+        assert_eq!(job.nozzle_mm, Some(0.4));
+        assert_eq!(job.plate.as_deref(), Some("High Temp Plate"));
     }
 }

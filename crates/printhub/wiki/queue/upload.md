@@ -1,7 +1,7 @@
 ---
 title: Uploading a job
 summary: Model or G-code, and what each slicing setting does.
-keywords: upload, stl, gcode, g-code, 3mf, slice, slicer, orcaslicer, print profile, filament profile, infill, supports, layer height, file size, multicolour, multi-colour
+keywords: upload, stl, gcode, g-code, 3mf, slice, slicer, orcaslicer, build plate, plate, bed temperature, print profile, filament profile, infill, supports, layer height, file size, multicolour, multi-colour
 order: 1
 ---
 ## Model or G-code
@@ -29,6 +29,17 @@ one, and its colour colours the sliced model. Confirming the job preselects it.
 
 > Choosing a spool of a different material when confirming does not slice the model again: it
 > still prints at the temperatures of the first spool's profile.
+
+### Build plate
+
+The plate the model will print on: *Textured PEI Plate* or *High Temp Plate*. The filament
+profile sets a bed temperature for each, and the model is sliced for the one chosen here. The
+[material pages](/wiki/filament/materials) list both temperatures. The job page shows the plate
+as *Build plate*, for G-code too when the file names one.
+
+> PrintHub cannot see which plate is on the printer, and the G-code holds the bed temperature
+> for the plate it was sliced for. Swap the plate
+> [before confirming the bed clear](/wiki/queue/waiting#nobody-has-confirmed-that-the-bed-is-clear).
 
 ### Print profile
 

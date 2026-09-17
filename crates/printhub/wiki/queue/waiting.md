@@ -39,6 +39,8 @@ off. The camera still there shows the bed as it is now.
 > Confirm only once the bed is really empty. The next job starts within seconds, and a print
 > left on the bed ends up under the nozzle.
 
+> Fit the plate the next job was sliced for first: its job page names it under *Build plate*.
+
 ## The spool is not in a tray
 
 The spool chosen for that filament is not [in any tray](/wiki/filament/trays). Load it and set it

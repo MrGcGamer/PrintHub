@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use printhub::{
     config::Config,
     gcode, probe,
-    slicer::{self, SliceSettings, Slicer},
+    slicer::{self, Plate, SliceSettings, Slicer},
     web,
 };
 use tracing_subscriber::EnvFilter;
@@ -86,6 +86,7 @@ async fn slice_selftest(config: &Config) -> anyhow::Result<ExitCode> {
     let machine = slicer::machine_name(nozzle);
     let settings = SliceSettings {
         nozzle,
+        plate: Plate::TexturedPei,
         process: slicer::default_process(nozzle),
         filament: "Elegoo PLA @ECC2".into(),
         color_hex: "#2850DF".into(),

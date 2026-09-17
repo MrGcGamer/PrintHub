@@ -19,6 +19,9 @@ pub struct GcodeInfo {
     pub generator: String,
     pub printer_model: String,
     pub nozzle: String,
+    /// The build plate type the bed is heated for, as OrcaSlicer names it; empty when the file
+    /// gives none.
+    pub plate: String,
     pub estimated_seconds: Option<i64>,
     pub layers: Option<i64>,
     /// One entry per slicer filament, including ones no object uses.
@@ -156,6 +159,9 @@ pub fn parse(head: &str, tail: &str) -> Result<GcodeInfo, GcodeError> {
         generator,
         printer_model: list("printer_model").join(";"),
         nozzle: list("nozzle_diameter").join(";"),
+        plate: settings
+            .get("curr_bed_type")
+            .map_or_else(String::new, |plate| (*plate).to_owned()),
         estimated_seconds: settings
             .get("estimated printing time (normal mode)")
             .and_then(|raw| parse_duration(raw)),
@@ -209,6 +215,7 @@ mod tests {
         assert_eq!(info.printer_model, "Elegoo Centauri Carbon 2");
         assert_eq!(info.nozzle, "0.4");
         assert_eq!(info.nozzle_mm(), Some(0.4));
+        assert_eq!(info.plate, "Cool Plate", "sliced before the plate was set");
         let mixed = GcodeInfo {
             nozzle: "0.4;0.6".into(),
             ..info.clone()

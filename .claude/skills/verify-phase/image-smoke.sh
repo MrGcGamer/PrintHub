@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Smoke test of the built image: `serve` in a container with compose's hardening, against the
-# fake printer, through an STL upload sliced inside the container.
+# fake printer, through an STL upload sliced inside the container with an inherited print profile
+# and a non-default build plate.
 # Usage: image-smoke.sh <image> <fakeprinter-volume>
 # The volume must hold a Linux `fakeprinter` binary for the image's architecture.
 set -u
@@ -60,7 +61,7 @@ done
 check "dashboard connected" yes "$(grep -q Connected <<<"$card" && echo yes)"
 
 check "create spool" 303 "$(curl -s -o /dev/null -w '%{http_code}' -b "$J" -H "Origin: $B" \
-  --data-urlencode material=PLA --data-urlencode brand=Elegoo --data-urlencode color_name=Blue \
+  --data-urlencode material=PET-CF --data-urlencode brand=Elegoo --data-urlencode color_name=Blue \
   --data-urlencode 'color_hex=#2850DF' --data-urlencode initial_grams=1000 \
   --data-urlencode owner_id= $B/spools)"
 
@@ -77,8 +78,8 @@ for f in faces:
 open(sys.argv[1], "w").write("\n".join(out + ["endsolid cube", ""]))
 EOF
 location=$(curl -s -o /dev/null -w '%{redirect_url}' -b "$J" -H "Origin: $B" \
-  -F file=@"$D/cube.stl" -F spool_id=1 -F 'process=0.20mm Standard @Elegoo CC2 0.4 nozzle' \
-  -F infill=15 $B/jobs)
+  -F file=@"$D/cube.stl" -F spool_id=1 -F 'plate=High Temp Plate' \
+  -F 'process=0.12mm Fine @Elegoo CC2 0.4 nozzle' -F infill=15 $B/jobs)
 check "upload STL" "$B/jobs/1" "$location"
 
 for _ in {1..120}; do
@@ -87,6 +88,10 @@ for _ in {1..120}; do
   sleep 1
 done
 check "sliced in the container" yes "$(grep -q 'Waiting for confirmation' <<<"$job" && echo yes)"
+check "job page names the plate" yes "$(grep -q 'High Temp Plate' <<<"$job" && echo yes)"
+# Elegoo PET-CF heats the High Temp plate to 70 and the textured one to 100.
+check "bed heated for the plate" "M190 S70 A" \
+  "$(docker exec printhub-smoke-serve grep -m1 '^M190' /data/jobs/1/job.gcode)"
 
 for _ in {1..60}; do
   health=$(docker inspect -f '{{.State.Health.Status}}' printhub-smoke-serve)

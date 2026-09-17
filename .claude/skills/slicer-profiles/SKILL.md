@@ -39,16 +39,17 @@ $S compatible "Elegoo Centauri Carbon 2 0.4 nozzle" filament
 - `table` and `compatible` list only selectable profiles (`"instantiation": "true"`).
 - Filament values are one-element lists; `table` prints the element.
 - `compatible` marks each hit `raw` (the file names the machine) or `inherited` (only the
-  flattened profile does). PrintHub's upload form currently lists only `raw` ones; see
-  `HANDOFF-slicer-bugs.md` if it still exists.
+  flattened profile does). PrintHub's upload form lists both.
 
 ## 3. Before stating a fact
 
-- Profiles say what the slicer is told, not what a slice produces. For anything the CLI decides
-  itself, such as the plate type (`curr_bed_type`, default Cool Plate), read real G-code: a
-  fixture in `crates/printhub/tests/fixtures/` or a fresh slice via
-  `slicer::tests::real_slicer_when_available` (command in `CLAUDE.md`).
+- Profiles say what the slicer is told, not what a slice produces. For anything PrintHub or the
+  CLI sets at slice time, such as the plate type (`curr_bed_type`, chosen on the upload form;
+  the CLI's own default is Cool Plate), read real G-code: a fresh slice via
+  `slicer::tests::real_slicer_when_available` (command in `CLAUDE.md`). The fixtures in
+  `crates/printhub/tests/fixtures/` predate the plate choice and say Cool Plate.
 - Plate columns are named by OrcaSlicer: `cool_plate_temp` Cool Plate, `hot_plate_temp` High
   Temp Plate, `textured_plate_temp` Textured PEI Plate. A value of 0 means the filament does not
   support that plate (`PrintConfig.cpp` tooltips).
-- Which plate the user's printer has is a fact about their printer: ask.
+- The user swaps between a textured PEI and a smooth High Temp plate, so a material fact about
+  the bed has to name the plate.

@@ -16,6 +16,11 @@
         {% for spool in spools %}<option value="{{ spool.value }}"{% if spool.selected %} selected{% endif %}>{{ spool.name }}</option>{% endfor %}
       </select>
     </label>
+    <label>Build plate <a class="help" href="/wiki/queue/upload#build-plate" aria-label="Help: build plate" target="_blank" rel="noopener">?</a>
+      <select name="plate">
+        {% for plate in plates %}<option value="{{ plate.value }}"{% if plate.selected %} selected{% endif %}>{{ plate.name }}</option>{% endfor %}
+      </select>
+    </label>
     <label>Print profile <a class="help" href="/wiki/queue/upload#print-profile" aria-label="Help: print profile" target="_blank" rel="noopener">?</a>
       <select name="process">
         {% for process in processes %}<option value="{{ process.value }}"{% if process.selected %} selected{% endif %}>{{ process.name }}</option>{% endfor %}

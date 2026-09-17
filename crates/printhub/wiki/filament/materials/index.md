@@ -39,7 +39,7 @@ brand, compare the table with the temperatures on its label.
 | Column | Meaning |
 |---|---|
 | Nozzle | Printing temperature in °C, and in brackets the range the profile allows. |
-| Bed | Bed temperature in °C for a textured PEI plate / a High Temp plate, as OrcaSlicer names the plate types. |
+| Bed | Bed temperature in °C for a textured PEI plate / a High Temp plate, as OrcaSlicer names the plate types. A model sliced here uses the one for the [build plate](/wiki/queue/upload#build-plate) chosen when uploading. |
 | Fan | The part-cooling fan's range in percent. |
 | Flow | The most plastic per second, in mm³, the profile lets the nozzle melt. It caps the print speed, and is what *Rapid* and *HF* profiles raise. |
 

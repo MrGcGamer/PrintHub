@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT j.id AS \"id!\", j.owner_id, u.username AS \"owner_name?\", j.name, j.source,\n                  j.state, j.position, j.process_profile, j.filament_profile, j.supports,\n                  j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,\n                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm\n           FROM jobs j LEFT JOIN users u ON u.id = j.owner_id\n           WHERE j.state = ?\n           ORDER BY j.position, j.id",
+  "query": "SELECT j.id AS \"id!\", j.owner_id, u.username AS \"owner_name?\", j.name, j.source,\n                  j.state, j.position, j.process_profile, j.filament_profile, j.supports,\n                  j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,\n                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm,\n                  j.plate\n           FROM jobs j LEFT JOIN users u ON u.id = j.owner_id\n           WHERE j.id = ?",
   "describe": {
     "columns": [
       {
@@ -222,6 +222,17 @@
             "name": "nozzle_mm"
           }
         }
+      },
+      {
+        "name": "plate",
+        "ordinal": 20,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "plate"
+          }
+        }
       }
     ],
     "parameters": {
@@ -247,8 +258,9 @@
       false,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "bf9cc972dd78be4d8b10a204ca35b2c8a5de923abe2e2f34c495ffb51e21790b"
+  "hash": "0dd266be050c341a3bd271222296179dc65a20c92123b05db82205bfc264716f"
 }
