@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ name }} · Statistics · PrintHub{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="card-head">
+    <h1>{{ name }}</h1>
+    <nav class="periods" aria-label="Period">
+      {% for link in periods %}<a href="{{ link.href }}"{% if link.current %} aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}
+    </nav>
+  </div>
+  <p><a href="{{ overview }}">Everyone's statistics</a></p>
+  <dl class="tiles">
+    {% for tile in tiles %}<div class="tile"><dt>{{ tile.label }}</dt><dd>{{ tile.value }}</dd></div>{% endfor %}
+  </dl>
+  {% if !debts.is_empty() %}
+  <h2>Balances</h2>
+  <ul>
+    {% for debt in debts %}<li>{{ debt.debtor }} owes {{ debt.creditor }} {{ debt.amount }}</li>{% endfor %}
+  </ul>
+  <p><a href="/stats#balances">Record a payment</a></p>
+  {% endif %}
+</section>
+{% if let Some(chart) = chart %}
+<section class="panel">
+  <h2>Filament per {{ unit }}</h2>
+  {% include "chart.html" %}
+</section>
+{% endif %}
+<div class="grid stats-grid">
+  <section class="panel">
+    <h2>Whose filament {{ name }} used</h2>
+    {% if used.is_empty() %}
+    <p class="muted">None in this period.</p>
+    {% else %}
+    <table>
+      <thead><tr><th>Spool owner</th><th class="num">Filament</th><th class="num">Worth</th></tr></thead>
+      <tbody>{% for row in used %}<tr><td>{{ row.label }}</td><td class="num">{{ row.grams }}</td><td class="num">{{ row.value }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% endif %}
+  </section>
+  <section class="panel">
+    <h2>Who used {{ name }}'s filament</h2>
+    {% if used_by.is_empty() %}
+    <p class="muted">Nobody in this period.</p>
+    {% else %}
+    <table>
+      <thead><tr><th>Person</th><th class="num">Filament</th><th class="num">Worth</th></tr></thead>
+      <tbody>{% for row in used_by %}<tr><td>{{ row.label }}</td><td class="num">{{ row.grams }}</td><td class="num">{{ row.value }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% endif %}
+  </section>
+  {% if !materials.is_empty() %}
+  <section class="panel">
+    <h2>Materials</h2>
+    <table>
+      <tbody>{% for row in materials %}<tr><td>{{ row.label }}</td><td class="num">{{ row.grams }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+  {% endif %}
+</div>
+<section class="panel">
+  <h2>Prints</h2>
+  {% if prints.is_empty() %}
+  <p class="muted">No prints in this period.</p>
+  {% else %}
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Ended</th><th>Job</th><th>Outcome</th><th class="num">Filament</th><th class="num">Worth of other people's</th></tr></thead>
+      <tbody>
+        {% for print in prints %}
+        <tr><td>{{ print.when }}</td><td><a href="/jobs/{{ print.job_id }}">{{ print.name }}</a></td><td>{{ print.outcome }}</td><td class="num">{{ print.grams }}</td><td class="num">{{ print.others_value }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

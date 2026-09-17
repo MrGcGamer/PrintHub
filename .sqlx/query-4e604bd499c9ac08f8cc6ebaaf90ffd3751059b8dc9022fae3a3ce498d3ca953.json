@@ -1,0 +1,45 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT user_id AS \"user_id!\", spool_owner_id AS \"owner_id!\",\n                  SUM(value_cents) AS \"value_cents!: f64\"\n           FROM consumption\n           WHERE kind IN ('print', 'estimate') AND user_id IS NOT NULL\n             AND spool_owner_id IS NOT NULL AND user_id != spool_owner_id\n             AND value_cents IS NOT NULL\n           GROUP BY user_id, spool_owner_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "consumption",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "owner_id!",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "consumption",
+            "name": "spool_owner_id"
+          }
+        }
+      },
+      {
+        "name": "value_cents!: f64",
+        "ordinal": 2,
+        "type_info": "Float",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "4e604bd499c9ac08f8cc6ebaaf90ffd3751059b8dc9022fae3a3ce498d3ca953"
+}

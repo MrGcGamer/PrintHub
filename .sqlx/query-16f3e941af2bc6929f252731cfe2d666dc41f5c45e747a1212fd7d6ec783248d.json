@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT owner_id, state, started_at AS \"started_at!\", finished_at AS \"finished_at!\"\n           FROM jobs\n           WHERE state IN ('done', 'failed', 'cancelled')\n             AND started_at IS NOT NULL AND finished_at IS NOT NULL AND finished_at >= ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "owner_id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "owner_id"
+          }
+        }
+      },
+      {
+        "name": "state",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "name": "started_at!",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "name": "finished_at!",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "finished_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "16f3e941af2bc6929f252731cfe2d666dc41f5c45e747a1212fd7d6ec783248d"
+}

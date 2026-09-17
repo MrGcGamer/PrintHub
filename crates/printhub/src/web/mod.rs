@@ -2,6 +2,7 @@
 
 mod admin;
 mod assets;
+mod chart;
 mod error;
 mod filament;
 mod guard;
@@ -9,6 +10,7 @@ mod live;
 mod pages;
 mod queue;
 mod session;
+mod stats;
 mod views;
 
 use std::{ops::Deref, sync::Arc, time::Duration};
@@ -199,6 +201,13 @@ pub fn router(state: AppState) -> Router {
         .route("/jobs/{id}/cancel", post(queue::cancel_job))
         .route("/jobs/{id}/requeue", post(queue::requeue_job))
         .route("/jobs/{id}/move", post(queue::move_job))
+        .route("/stats", get(stats::stats_page))
+        .route("/stats/users/{id}", get(stats::user_stats_page))
+        .route("/stats/settlements", post(stats::record_payment))
+        .route(
+            "/stats/settlements/{id}/delete",
+            post(stats::delete_payment),
+        )
         .route("/printer/bed-clear", post(queue::mark_bed_clear))
         .route("/printer/nozzle", post(pages::set_nozzle))
         .route("/events/printer", get(live::printer_events))

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Statistics · PrintHub{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="card-head">
+    <h1>Statistics</h1>
+    <nav class="periods" aria-label="Period">
+      {% for link in periods %}<a href="{{ link.href }}"{% if link.current %} aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}
+    </nav>
+  </div>
+  {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <dl class="tiles">
+    {% for tile in tiles %}<div class="tile"><dt>{{ tile.label }}</dt><dd>{{ tile.value }}</dd></div>{% endfor %}
+  </dl>
+  {% if people.is_empty() %}
+  <p class="muted">Nothing was printed in this period.</p>
+  {% else %}
+  <h2>People</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Person</th><th class="num">Prints</th><th class="num">Failed</th><th class="num">Print time</th><th class="num">Filament</th><th class="num">Own</th><th class="num">Shared</th><th class="num">Others'</th><th class="num">Worth</th><th class="num">Wasted</th></tr>
+      </thead>
+      <tbody>
+        {% for row in people %}
+        <tr>
+          <td><a href="{{ row.href }}">{{ row.name }}</a></td>
+          <td class="num">{{ row.prints }}</td>
+          <td class="num">{{ row.unfinished }}</td>
+          <td class="num">{{ row.time }}</td>
+          <td class="num">{{ row.filament }}</td>
+          <td class="num">{{ row.own }}</td>
+          <td class="num">{{ row.shared }}</td>
+          <td class="num">{{ row.others }}</td>
+          <td class="num">{{ row.others_value }}</td>
+          <td class="num">{{ row.wasted }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">Own, shared and others' split the filament by whose spools it came from; worth is what others' filament cost them. Failed counts stopped prints too, and wasted is the filament they used.</p>
+  {% endif %}
+</section>
+{% if let Some(chart) = chart %}
+<section class="panel">
+  <h2>Filament per {{ unit }}</h2>
+  {% include "chart.html" %}
+</section>
+{% endif %}
+{% if !matrix.rows.is_empty() %}
+<section class="panel">
+  <h2>Whose filament</h2>
+  <p class="muted">Each row is who printed, each column whose spools they used.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Printed by</th>{% for owner in matrix.owners %}<th class="num">{{ owner }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in matrix.rows %}
+        <tr><td>{{ row.name }}</td>{% for cell in row.cells %}<td class="num">{{ cell }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+<section class="panel" id="balances">
+  <h2>Balances</h2>
+  <p class="muted">Over all time: filament used from other people's spools that have a price, less what was paid back.</p>
+  {% if debts.is_empty() %}
+  <p class="muted">Nobody owes anybody anything.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Who</th><th class="num">Amount</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+      {% for debt in debts %}
+      <tr>
+        <td>{{ debt.debtor }} owes {{ debt.creditor }}</td>
+        <td class="num">{{ debt.amount }}</td>
+        <td>
+          {% if debt.can_record %}
+          <form method="post" action="/stats/settlements" class="inline-form">
+            <input type="hidden" name="from_user" value="{{ debt.debtor_id }}">
+            <input type="hidden" name="to_user" value="{{ debt.creditor_id }}">
+            <label><span class="visually-hidden">Amount {{ debt.debtor }} paid {{ debt.creditor }}</span>
+              <input name="amount" value="{{ debt.amount }}" inputmode="decimal" size="8" required>
+            </label>
+            <button class="secondary">Record payment</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Whoever received a payment records it, or an admin.</p>
+  {% endif %}
+  {% if !payments.is_empty() %}
+  <h2>Payments</h2>
+  <table>
+    <thead><tr><th>When</th><th>Paid</th><th class="num">Amount</th><th>Recorded by</th>{% if can_delete_payments %}<th><span class="visually-hidden">Actions</span></th>{% endif %}</tr></thead>
+    <tbody>
+      {% for payment in payments %}
+      <tr>
+        <td>{{ payment.when }}</td>
+        <td>{{ payment.from }} paid {{ payment.to }}</td>
+        <td class="num">{{ payment.amount }}</td>
+        <td>{{ payment.recorded_by }}</td>
+        {% if can_delete_payments %}<td><form method="post" action="/stats/settlements/{{ payment.id }}/delete"><button class="secondary">Delete</button></form></td>{% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% if !materials.is_empty() || !unaccounted.is_empty() %}
+<div class="grid stats-grid">
+  {% if !materials.is_empty() %}
+  <section class="panel">
+    <h2>Materials</h2>
+    <table>
+      <tbody>{% for row in materials %}<tr><td>{{ row.label }}</td><td class="num">{{ row.grams }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+  {% endif %}
+  {% if !unaccounted.is_empty() %}
+  <section class="panel">
+    <h2>Not accounted for</h2>
+    <p class="muted">What weigh-ins found beyond what prints recorded, by spool owner. Missing filament went into prints started without PrintHub, purges, or spools that were already used when added.</p>
+    <table>
+      <tbody>{% for row in unaccounted %}<tr><td>{{ row.label }}</td><td class="num">{{ row.grams }}</td><td class="num">{{ row.value }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

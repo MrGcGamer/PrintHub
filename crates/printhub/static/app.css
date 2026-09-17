@@ -10,6 +10,17 @@
   --ok: #1d7038;
   --warn: #975400;
   --danger: #b0261e;
+  /* Chart series. The order keeps neighbours apart for colour-blind readers; check any change
+     with a palette validator against both panel colours. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  --series-other: #898781;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -25,6 +36,14 @@
     --ok: #6fd392;
     --warn: #f2b660;
     --danger: #ff9187;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
   }
 }
 
@@ -190,3 +209,39 @@ label.check { display: inline-flex; align-items: center; font-weight: 400; margi
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+.periods { display: flex; flex-wrap: wrap; gap: 1rem; }
+.periods a[aria-current] { color: var(--text); font-weight: 700; text-decoration: none; }
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.8rem; }
+.tile dt { color: var(--muted); font-size: 0.9rem; }
+.tile dd { margin: 0; font-size: 1.6rem; font-weight: 600; }
+
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+.stats-grid { margin-top: 1.25rem; }
+.stats-grid + .panel { margin-top: 1.25rem; }
+
+.chart { margin: 0; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart text { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart .grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart details { margin-top: 0.75rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; list-style: none; padding: 0; margin: 0 0 0.5rem; }
+.legend li { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend .key { width: 0.75rem; height: 0.75rem; border-radius: 3px; }
+.series-1 { fill: var(--series-1); background: var(--series-1); }
+.series-2 { fill: var(--series-2); background: var(--series-2); }
+.series-3 { fill: var(--series-3); background: var(--series-3); }
+.series-4 { fill: var(--series-4); background: var(--series-4); }
+.series-5 { fill: var(--series-5); background: var(--series-5); }
+.series-6 { fill: var(--series-6); background: var(--series-6); }
+.series-7 { fill: var(--series-7); background: var(--series-7); }
+.series-8 { fill: var(--series-8); background: var(--series-8); }
+.series-other { fill: var(--series-other); background: var(--series-other); }

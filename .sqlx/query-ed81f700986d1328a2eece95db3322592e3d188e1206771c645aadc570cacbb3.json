@@ -1,0 +1,76 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT j.id AS \"id!\", j.name, j.state, j.finished_at AS \"finished_at!\",\n                  COALESCE(SUM(c.grams), 0.0) AS \"grams!: f64\",\n                  SUM(CASE WHEN c.spool_owner_id != j.owner_id THEN c.value_cents END)\n                      AS \"others_value_cents?: f64\"\n           FROM jobs j\n           LEFT JOIN consumption c ON c.job_id = j.id AND c.kind IN ('print', 'estimate')\n           WHERE j.owner_id = ? AND j.state IN ('done', 'failed', 'cancelled')\n             AND j.started_at IS NOT NULL AND j.finished_at >= ?\n           GROUP BY j.id\n           ORDER BY j.finished_at DESC, j.id DESC\n           LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "state",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "name": "finished_at!",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "finished_at"
+          }
+        }
+      },
+      {
+        "name": "grams!: f64",
+        "ordinal": 4,
+        "type_info": "Float",
+        "origin": "Expression"
+      },
+      {
+        "name": "others_value_cents?: f64",
+        "ordinal": 5,
+        "type_info": "Float",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "ed81f700986d1328a2eece95db3322592e3d188e1206771c645aadc570cacbb3"
+}

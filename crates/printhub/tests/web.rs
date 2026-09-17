@@ -15,7 +15,7 @@ use printhub::{
     camera::CameraHub,
     cc2::{ClientConfig, PrinterClient, Timing},
     config::Config,
-    dispatcher, inventory,
+    dispatcher, gcode, inventory,
     jobs::{self, JobState},
     printer::PrinterLink,
     schedule,
@@ -1102,4 +1102,159 @@ async fn print_windows_are_admin_only() {
     )
     .await;
     assert!(schedule::rules(&app.db).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn statistics_show_whose_filament_was_used_and_what_is_owed() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let sam = app.member("sam").await;
+    let alex = app.member("alex").await;
+    let user_id = |name: &'static str| {
+        let db = app.db.clone();
+        async move {
+            accounts::login_record(&db, name)
+                .await
+                .unwrap()
+                .unwrap()
+                .0
+                .id
+                .to_string()
+        }
+    };
+    let (sam_id, alex_id) = (user_id("sam").await, user_id("alex").await);
+    let spool_path = app
+        .add_spool(&sam, &spool_fields("PLA", "Blue", "#2850DF"))
+        .await;
+    let spool: i64 = id_of(&spool_path).parse().unwrap();
+
+    // Alex prints 100 g from Sam's spool, which cost 19.99 for 1000 g.
+    let now = store::now();
+    let job = jobs::create(
+        &app.db,
+        &jobs::NewJob {
+            owner_id: alex_id.parse().unwrap(),
+            name: "benchy.gcode",
+            source: jobs::Source::Gcode,
+            process_profile: None,
+            filament_profile: None,
+            supports: None,
+            infill_percent: None,
+        },
+        now - 3600,
+    )
+    .await
+    .unwrap();
+    let info = gcode::GcodeInfo {
+        generator: String::new(),
+        printer_model: String::new(),
+        nozzle: String::new(),
+        estimated_seconds: Some(1800),
+        layers: Some(10),
+        tools: vec![gcode::ToolUse {
+            index: 0,
+            material: "PLA".into(),
+            color: "#2850DF".into(),
+            grams: 100.0,
+            profile: String::new(),
+        }],
+    };
+    jobs::store_gcode_info(&app.db, job, &info, Some(spool))
+        .await
+        .unwrap();
+    for (from, to) in [
+        (JobState::AwaitingConfirm, JobState::Queued),
+        (JobState::Queued, JobState::Uploading),
+        (JobState::Uploading, JobState::Printing),
+    ] {
+        jobs::transition(&app.db, job, from, to, None, now - 1800)
+            .await
+            .unwrap();
+    }
+    let printing = jobs::get(&app.db, job).await.unwrap().unwrap();
+    jobs::finish(&app.db, &printing, JobState::Done, 100, None, now)
+        .await
+        .unwrap();
+
+    // Handing the spool to everyone and repricing it later does not rewrite the print.
+    let mut shared = spool_fields("PLA", "Blue", "#2850DF");
+    shared.retain(|(name, _)| *name != "price");
+    shared.extend([("price", "99"), ("owner_id", "")]);
+    let edited = app.post(&spool_path, Some(&admin), &shared).await;
+    assert_eq!(edited.status(), StatusCode::SEE_OTHER);
+
+    let page = app.get("/stats", Some(&alex)).await.text().await.unwrap();
+    assert!(page.contains("100 g (100%)"), "{page}");
+    assert!(
+        page.contains(r#"<td class="num">100 g (2.00)</td>"#),
+        "{page}"
+    );
+    assert!(page.contains("alex owes sam"), "{page}");
+    assert!(
+        page.contains(r#"class="series-3""#),
+        "alex holds the third account's colour"
+    );
+    assert!(
+        !page.contains("Record payment"),
+        "a debtor is not offered to record their payment"
+    );
+
+    let payment = [
+        ("from_user", alex_id.as_str()),
+        ("to_user", sam_id.as_str()),
+        ("amount", "2"),
+    ];
+    let refused = app.post("/stats/settlements", Some(&alex), &payment).await;
+    assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+
+    let sam_page = app.get("/stats", Some(&sam)).await.text().await.unwrap();
+    assert!(sam_page.contains("Record payment"));
+    let no_amount = app
+        .post(
+            "/stats/settlements",
+            Some(&sam),
+            &[payment[0], payment[1], ("amount", "0")],
+        )
+        .await;
+    assert_eq!(
+        no_amount.headers()[LOCATION],
+        "/stats?problem=payment-amount#balances"
+    );
+    let paid = app.post("/stats/settlements", Some(&sam), &payment).await;
+    assert_eq!(paid.headers()[LOCATION], "/stats?done=paid#balances");
+    let settled = app.get("/stats", Some(&sam)).await.text().await.unwrap();
+    assert!(
+        settled.contains("Nobody owes anybody anything."),
+        "{settled}"
+    );
+    assert!(settled.contains("alex paid sam"));
+
+    let alex_page = app
+        .get(&format!("/stats/users/{alex_id}?period=30d"), Some(&sam))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(
+        alex_page.contains("Whose filament alex used"),
+        "{alex_page}"
+    );
+    assert!(alex_page.contains("benchy.gcode"));
+    assert!(
+        alex_page.contains(r#"<td>sam</td><td class="num">100 g</td><td class="num">2.00</td>"#)
+    );
+    assert_eq!(
+        app.get("/stats/users/9999", Some(&sam)).await.status(),
+        StatusCode::NOT_FOUND
+    );
+
+    let payment_id = printhub::stats::settlements(&app.db).await.unwrap()[0].id;
+    let delete = format!("/stats/settlements/{payment_id}/delete");
+    assert_eq!(
+        app.post(&delete, Some(&sam), &[]).await.status(),
+        StatusCode::FORBIDDEN
+    );
+    app.post(&delete, Some(&admin), &[]).await;
+    let reopened = app.get("/stats", Some(&sam)).await.text().await.unwrap();
+    assert!(reopened.contains("alex owes sam"));
 }

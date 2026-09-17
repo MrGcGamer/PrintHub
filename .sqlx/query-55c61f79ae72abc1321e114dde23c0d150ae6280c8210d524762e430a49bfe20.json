@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT c.user_id, c.spool_owner_id, c.kind, c.grams, c.value_cents, s.material,\n                c.created_at\n         FROM consumption c JOIN spools s ON s.id = c.spool_id\n         WHERE c.created_at >= ?\n         ORDER BY c.created_at, c.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "consumption",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "spool_owner_id",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "consumption",
+            "name": "spool_owner_id"
+          }
+        }
+      },
+      {
+        "name": "kind",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "consumption",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "name": "grams",
+        "ordinal": 3,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "consumption",
+            "name": "grams"
+          }
+        }
+      },
+      {
+        "name": "value_cents",
+        "ordinal": 4,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "consumption",
+            "name": "value_cents"
+          }
+        }
+      },
+      {
+        "name": "material",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "material"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "consumption",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "55c61f79ae72abc1321e114dde23c0d150ae6280c8210d524762e430a49bfe20"
+}

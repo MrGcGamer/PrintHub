@@ -5,10 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A shared print queue for one Elegoo Centauri Carbon 2 (CC2): accounts for a group of friends,
-a live dashboard and camera, a filament inventory bound to the printer's trays, and a queue
-that slices STL uploads with the OrcaSlicer CLI and starts jobs when the printer, bed, nozzle
-and schedule allow. Rust (axum, askama + htmx, sqlx/SQLite, rumqttc), shipped as one Docker
-image configured by environment variables (see the table in `README.md`).
+a live dashboard and camera, a filament inventory bound to the printer's trays, a queue that
+slices STL uploads with the OrcaSlicer CLI and starts jobs when the printer, bed, nozzle and
+schedule allow, and statistics on who printed with whose filament. Rust (axum, askama + htmx,
+sqlx/SQLite, rumqttc), shipped as one Docker image configured by environment variables (see the
+table in `README.md`).
 
 **Nothing has run against the real printer yet.** Everything is verified against
 `crates/fakeprinter`, which models the documented protocol, not the firmware. The open
@@ -76,6 +77,13 @@ the job pages reuse to show why a job waits. `dispatcher` uploads as `printhub-<
 starts it with the `slot_map`, and follows the print by that filename and its sub-status.
 `remaining_grams` on a spool only changes together with a `consumption` row, in one
 transaction.
+
+**Statistics.** `stats` reads the `consumption` ledger and finished jobs, and aggregates them in
+pure functions. Each ledger row records the spool's owner and the filament's value when it is
+written, so editing a spool later does not rewrite who used whose filament or what is owed.
+Balances are always over all time, net of `settlements`; only the recipient or an admin records
+a payment. Chart colours (`web/chart.rs`, `--series-*` in `app.css`) are assigned by account id,
+so a person keeps their colour across periods.
 
 **Slicing.** The OrcaSlicer CLI ignores `inherits`, so `slicer::ProfileLibrary` flattens every
 profile and writes it back marked `from: system` (the CLI only treats a process as compatible

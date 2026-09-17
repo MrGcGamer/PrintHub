@@ -270,13 +270,18 @@ pub async fn weigh_in(
     let used = before.remaining_grams - remaining_grams;
     let kind = ConsumptionKind::WeighIn.as_str();
     sqlx::query!(
-        "INSERT INTO consumption (spool_id, user_id, kind, grams, note, created_at)
-         VALUES (?, ?, ?, ?, '', ?)",
-        spool_id,
+        "INSERT INTO consumption (spool_id, user_id, kind, grams, note, created_at,
+                                  spool_owner_id, value_cents)
+         SELECT s.id, ?, ?, ?, '', ?, s.owner_id,
+                CASE WHEN s.price_cents IS NOT NULL AND s.initial_grams > 0
+                     THEN ? * s.price_cents / s.initial_grams END
+         FROM spools s WHERE s.id = ?",
         user_id,
         kind,
         used,
         now,
+        used,
+        spool_id,
     )
     .execute(&mut *tx)
     .await?;
@@ -284,7 +289,8 @@ pub async fn weigh_in(
     Ok(())
 }
 
-/// Deducts what a print used, as a ledger entry tied to the job.
+/// Deducts what a print used, as a ledger entry tied to the job. The entry keeps the spool's
+/// current owner and the filament's value, which later edits to the spool leave alone.
 #[allow(clippy::too_many_arguments)]
 pub async fn record_use(
     conn: &mut sqlx::SqliteConnection,
@@ -296,24 +302,32 @@ pub async fn record_use(
     note: &str,
     now: i64,
 ) -> Result<(), InventoryError> {
-    sqlx::query!(
+    let updated = sqlx::query!(
         "UPDATE spools SET remaining_grams = remaining_grams - ? WHERE id = ?",
         grams,
         spool_id,
     )
     .execute(&mut *conn)
     .await?;
+    if updated.rows_affected() == 0 {
+        return Err(InventoryError::NotFound);
+    }
     let kind = kind.as_str();
     sqlx::query!(
-        "INSERT INTO consumption (spool_id, user_id, job_id, kind, grams, note, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
-        spool_id,
+        "INSERT INTO consumption (spool_id, user_id, job_id, kind, grams, note, created_at,
+                                  spool_owner_id, value_cents)
+         SELECT s.id, ?, ?, ?, ?, ?, ?, s.owner_id,
+                CASE WHEN s.price_cents IS NOT NULL AND s.initial_grams > 0
+                     THEN ? * s.price_cents / s.initial_grams END
+         FROM spools s WHERE s.id = ?",
         user_id,
         job_id,
         kind,
         grams,
         note,
         now,
+        grams,
+        spool_id,
     )
     .execute(&mut *conn)
     .await?;

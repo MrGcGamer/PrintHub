@@ -1,0 +1,110 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.id AS \"id!\", p.from_user, f.username AS from_name, p.to_user,\n                  t.username AS to_name, p.amount_cents, r.username AS \"recorded_by?\",\n                  p.created_at\n           FROM settlements p\n           JOIN users f ON f.id = p.from_user\n           JOIN users t ON t.id = p.to_user\n           LEFT JOIN users r ON r.id = p.recorded_by\n           ORDER BY p.created_at DESC, p.id DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "settlements",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "from_user",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "settlements",
+            "name": "from_user"
+          }
+        }
+      },
+      {
+        "name": "from_name",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "name": "to_user",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "settlements",
+            "name": "to_user"
+          }
+        }
+      },
+      {
+        "name": "to_name",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "name": "amount_cents",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "settlements",
+            "name": "amount_cents"
+          }
+        }
+      },
+      {
+        "name": "recorded_by?",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 7,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "settlements",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "f35b635c1a51455c13323542bfa870b900affa8f6ba3bbc04128fd9f628ed4e5"
+}

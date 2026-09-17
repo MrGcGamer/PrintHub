@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO settlements (from_user, to_user, amount_cents, recorded_by, created_at)\n         VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "9b73024eac5e2430947ca760dead330b78b8bc1b3bef8dd454cb4d600ef1a1b2"
+}

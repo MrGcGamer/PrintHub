@@ -11,5 +11,6 @@ pub mod printer;
 pub mod probe;
 pub mod schedule;
 pub mod slicer;
+pub mod stats;
 pub mod store;
 pub mod web;

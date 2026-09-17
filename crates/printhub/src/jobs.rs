@@ -1079,6 +1079,18 @@ mod tests {
         choose_spools(&db, done, &[(1, red), (2, blue)])
             .await
             .unwrap();
+        let mut priced = SpoolFields {
+            material: "PLA".into(),
+            brand: String::new(),
+            color_name: String::new(),
+            color_hex: "#000000".into(),
+            price_cents: Some(2000),
+            initial_grams: 1000.0,
+            notes: String::new(),
+        };
+        inventory::update_spool(&db, blue, &priced, Some(sam))
+            .await
+            .unwrap();
         transition(&db, done, JobState::Queued, JobState::Uploading, None, 2)
             .await
             .unwrap();
@@ -1130,6 +1142,23 @@ mod tests {
             [ConsumptionKind::Estimate, ConsumptionKind::Print]
         );
         assert_eq!(history[0].note, "cube.gcode");
+
+        priced.price_cents = Some(9900);
+        inventory::update_spool(&db, blue, &priced, None)
+            .await
+            .unwrap();
+        let blue_use = crate::stats::load(&db, 0)
+            .await
+            .unwrap()
+            .uses
+            .into_iter()
+            .find(|entry| entry.grams == 10.0)
+            .unwrap();
+        assert_eq!(
+            (blue_use.owner_id, blue_use.value_cents),
+            (Some(sam), Some(20.0)),
+            "the entry keeps the owner and price from when the print finished"
+        );
         assert!(matches!(
             finish(&db, &job, JobState::Done, 100, None, 8).await,
             Err(JobError::StateChanged { .. })

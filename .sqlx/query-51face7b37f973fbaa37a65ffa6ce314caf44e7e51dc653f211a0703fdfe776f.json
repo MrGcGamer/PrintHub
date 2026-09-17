@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO consumption (spool_id, user_id, job_id, kind, grams, note, created_at,\n                                  spool_owner_id, value_cents)\n         SELECT s.id, ?, ?, ?, ?, ?, ?, s.owner_id,\n                CASE WHEN s.price_cents IS NOT NULL AND s.initial_grams > 0\n                     THEN ? * s.price_cents / s.initial_grams END\n         FROM spools s WHERE s.id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "51face7b37f973fbaa37a65ffa6ce314caf44e7e51dc653f211a0703fdfe776f"
+}

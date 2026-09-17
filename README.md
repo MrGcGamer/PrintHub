@@ -3,7 +3,8 @@
 A shared print queue for one Elegoo Centauri Carbon 2: accounts for a group of friends, a live
 printer dashboard and camera, a filament inventory bound to the printer's trays, and a queue
 that slices STL uploads with OrcaSlicer and starts jobs when the bed is clear and the schedule
-allows.
+allows. Statistics show who prints how much, with whose filament, and what that leaves people
+owing each other.
 
 One Docker image, configured by environment variables, serving plain HTTP on port 8080.
 
