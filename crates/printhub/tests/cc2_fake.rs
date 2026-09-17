@@ -9,7 +9,7 @@ use printhub::{
     cc2::{
         ClientConfig, LinkState, PrinterClient, PrinterSnapshot, Timing,
         methods::{SlotMapEntry, error_code},
-        model::{MachineState, TrayState, printing_sub_status},
+        model::{MachineState, TrayState, printing_sub_status, task_status},
         upload::{self, Uploader},
     },
 };
@@ -159,17 +159,20 @@ async fn print_lifecycle_updates_snapshot() {
     .await;
     client.resume().await.unwrap();
 
+    // Firmware 02.01.00.00 ends a print with plain idle and an empty filename: only the task
+    // history says it finished.
     printer.complete_print();
-    wait_for(&client, "completed", |s| {
-        machine(s).is_some_and(|(state, sub, _)| {
-            state == MachineState::Idle && sub == printing_sub_status::COMPLETED
-        })
+    wait_for(&client, "finished", |s| {
+        machine(s).is_some_and(|(state, sub, _)| state == MachineState::Idle && sub == 0)
+            && s.status
+                .as_ref()
+                .is_some_and(|s| s.print_status.filename.is_empty())
     })
     .await;
-    assert_eq!(
-        client.snapshot().status.unwrap().print_status.filename,
-        "cube.gcode"
-    );
+    let history = client.task_history(10).await.unwrap().history_task_list;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].task_name, "cube.gcode");
+    assert_eq!(history[0].task_status, task_status::COMPLETED);
 }
 
 #[tokio::test]

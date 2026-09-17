@@ -250,6 +250,35 @@ impl FileDetail {
     }
 }
 
+/// Result of `PRINT_TASK_LIST` (1036). Firmware 02.01.00.00 clears `print_status` the moment a
+/// print ends, so this history is the only record of how it went.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct TaskHistory {
+    pub history_task_list: Vec<HistoryTask>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct HistoryTask {
+    /// Matches `print_status.uuid` seen while the print ran.
+    pub task_id: String,
+    /// The file's name, as uploaded.
+    pub task_name: String,
+    #[serde(deserialize_with = "lenient::int")]
+    pub task_status: i64,
+    #[serde(deserialize_with = "lenient::int")]
+    pub begin_time: i64,
+    #[serde(deserialize_with = "lenient::int")]
+    pub end_time: i64,
+}
+
+pub mod task_status {
+    /// The only value seen so far, on prints that ran to the end. What a stopped or failed
+    /// print records is unknown.
+    pub const COMPLETED: i64 = 1;
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ColorMapEntry {

@@ -110,6 +110,7 @@ pub async fn run(config: &Config) -> anyhow::Result<ExitCode> {
     }
 
     let mut snapshots = client.subscribe();
+    let mut printing_file = String::new();
     match timeout(
         Duration::from_secs(5),
         snapshots.wait_for(|snapshot| snapshot.status.is_some()),
@@ -118,6 +119,7 @@ pub async fn run(config: &Config) -> anyhow::Result<ExitCode> {
     {
         Ok(Ok(snapshot)) => {
             let status = snapshot.status.as_ref().expect("waited for it");
+            printing_file = status.print_status.filename.clone();
             report.ok(
                 "status",
                 format!(
@@ -134,6 +136,39 @@ pub async fn run(config: &Config) -> anyhow::Result<ExitCode> {
         _ => report.fail("status", "no full status frame within 5s"),
     }
     drop(snapshots);
+
+    // The status stream carries no layer total; 1046 is where a file's own metadata lives.
+    if !printing_file.is_empty() {
+        match client.file_detail(&printing_file).await {
+            Ok(detail) => report.ok(
+                "file detail",
+                format!(
+                    "{:?}: layers {:?}, print time {}s, filament {:.1}",
+                    printing_file,
+                    detail.layers(),
+                    detail.print_time,
+                    detail.total_filament_used,
+                ),
+            ),
+            Err(err) => report.warn("file detail", format!("1046 for {printing_file:?}: {err}")),
+        }
+    }
+
+    // On firmware 02.01.00.00 a finished print leaves no trace in the status: idle, sub-status
+    // 0, filename cleared. The task history is the only record of how a print ended.
+    match client
+        .request(
+            crate::cc2::methods::PRINT_TASK_LIST,
+            serde_json::json!({"page": 1, "page_size": 3}),
+        )
+        .await
+    {
+        Ok(envelope) => {
+            let raw = envelope.result.to_string();
+            report.ok("task list", raw.chars().take(900).collect::<String>());
+        }
+        Err(err) => report.warn("task list", format!("1036: {err}")),
+    }
 
     match client.canvas().await {
         Ok(canvas) if canvas.canvas_list.is_empty() => {

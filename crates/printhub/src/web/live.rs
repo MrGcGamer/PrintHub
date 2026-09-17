@@ -62,10 +62,9 @@ pub async fn printer_events(
                 let snapshot = printer.borrow().clone();
                 let bindings = bindings.borrow().clone();
                 let mounted = nozzle.borrow().clone();
-                // The printer sends no layer total, so the card needs the job's own count.
-                let job_layers = jobs::printing_layers(&state.db).await.unwrap_or_default();
+                let total_layers = super::layer_total(&state, &snapshot).await;
                 let partial = PrinterCardPartial {
-                    card: PrinterCard::new(&snapshot, &user, &bindings, &mounted, job_layers),
+                    card: PrinterCard::new(&snapshot, &user, &bindings, &mounted, total_layers),
                 };
                 let html = partial.render().unwrap_or_else(|err| {
                     tracing::error!(%err, "rendering printer card");

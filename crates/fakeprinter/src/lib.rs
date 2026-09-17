@@ -72,6 +72,8 @@ struct PrinterState {
     partial_uploads: HashMap<String, PartialUpload>,
     uploads: Vec<Upload>,
     started: Vec<Value>,
+    /// Finished prints, newest last, as method 1036 reports them.
+    history: Vec<Value>,
     registration_reply: String,
     answer_pings: bool,
     requests_seen: Vec<u32>,
@@ -213,16 +215,28 @@ impl FakePrinter {
         }));
     }
 
+    /// As firmware 02.01.00.00 ends a print: plain idle, no completion sub-status, and the
+    /// filename cleared. Only the task history records that it finished.
     pub fn complete_print(&self) {
         {
             let mut state = self.shared.state.lock().unwrap();
+            let finished = json!({
+                "task_id": state.uuid,
+                "task_name": state.filename,
+                "task_status": 1,
+                "begin_time": 0,
+                "end_time": state.task_counter,
+            });
+            state.history.push(finished);
             state.status = 1;
-            state.sub_status = 2077;
-            state.progress = 100;
+            state.sub_status = 0;
+            state.progress = 0;
+            state.filename = String::new();
+            state.uuid = String::new();
         }
         self.shared.push_delta(json!({
-            "machine_status": {"status": 1, "sub_status": 2077, "progress": 100},
-            "print_status": {"progress": 100, "state": "complete"},
+            "machine_status": {"status": 1, "sub_status": 0, "progress": 0},
+            "print_status": {"filename": "", "uuid": "", "progress": 0, "state": "standby"},
         }));
     }
 
@@ -252,6 +266,7 @@ impl PrinterState {
             partial_uploads: HashMap::new(),
             uploads: Vec::new(),
             started: Vec::new(),
+            history: Vec::new(),
             registration_reply: "ok".into(),
             answer_pings: true,
             requests_seen: Vec::new(),
@@ -395,6 +410,11 @@ impl Shared {
                 }),
                 None,
             ),
+            1036 => {
+                let mut tasks = state.history.clone();
+                tasks.reverse();
+                (json!({"error_code": 0, "history_task_list": tasks}), None)
+            }
             1044 => {
                 let files: Vec<Value> = state
                     .files

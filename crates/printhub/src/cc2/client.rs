@@ -25,7 +25,7 @@ use super::{
     methods::{
         self, Empty, Envelope, FileRef, Request, SlotMapEntry, StartPrint, VideoStream, error_code,
     },
-    model::{Attributes, CanvasInfo, CanvasStatus, FileDetail, StatusView},
+    model::{Attributes, CanvasInfo, CanvasStatus, FileDetail, StatusView, TaskHistory},
     status::{StatusCache, deep_merge},
 };
 
@@ -227,6 +227,15 @@ impl PrinterClient {
     pub async fn file_detail(&self, filename: &str) -> Result<FileDetail, CommandError> {
         self.request_as(methods::GET_FILE_DETAIL, FileRef::local(filename))
             .await
+    }
+
+    /// The newest `page_size` entries of the print history.
+    pub async fn task_history(&self, page_size: i64) -> Result<TaskHistory, CommandError> {
+        self.request_as(
+            methods::PRINT_TASK_LIST,
+            methods::TaskPage { page: 1, page_size },
+        )
+        .await
     }
 
     pub async fn start_print(

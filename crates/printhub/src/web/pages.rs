@@ -43,12 +43,13 @@ pub async fn dashboard(
         accounts::has_permission(&state.db, &current.user, Permission::SetNozzle).await?;
     let bindings = state.bindings.borrow().clone();
     let mounted = state.nozzle.borrow().clone();
+    let snapshot = state.printer.snapshot();
     let card = PrinterCard::new(
-        &state.printer.snapshot(),
+        &snapshot,
         &current.user,
         &bindings,
         &mounted,
-        jobs::printing_layers(&state.db).await?,
+        super::layer_total(&state, &snapshot).await,
     );
     let nozzle_choices = may_record_nozzle.then(|| {
         Nozzle::ALL

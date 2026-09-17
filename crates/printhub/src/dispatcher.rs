@@ -10,7 +10,7 @@ use crate::{
     cc2::{
         CommandError, LinkState, PrinterSnapshot,
         methods::{SlotMapEntry, error_code},
-        model::{MachineState, printing_sub_status as sub},
+        model::{MachineState, printing_sub_status as sub, task_status},
         upload::UploadError,
     },
     config::Nozzle,
@@ -20,7 +20,7 @@ use crate::{
     schedule::{self, Rule},
     slicer::SliceSettings,
     store,
-    web::AppState,
+    web::{AppState, FileLayers},
 };
 
 const TICK: Duration = Duration::from_secs(30);
@@ -29,6 +29,8 @@ const SETTLE: Duration = Duration::from_millis(500);
 /// After a start the printer can report idle for a while before it reports printing, and a
 /// job whose printing state was never seen (PrintHub restarted) only ends after this long.
 const START_GRACE_SECS: i64 = 120;
+/// Enough history to find a print that just ended, even with a few prints started elsewhere.
+const HISTORY_PAGE: i64 = 10;
 
 /// Everything `jobs::check_start` needs besides the job, loaded once for a pass over the queue.
 pub struct Readiness {
@@ -148,6 +150,7 @@ async fn recover(state: &AppState) {
 
 async fn step(state: &AppState, seen_printing: &mut HashSet<i64>) -> Result<(), JobError> {
     let snapshot = state.printer.snapshot();
+    refresh_file_layers(state, &snapshot).await;
     for job in jobs::in_state(&state.db, JobState::Printing).await? {
         follow(state, &job, &snapshot, seen_printing).await?;
     }
@@ -175,6 +178,66 @@ async fn step(state: &AppState, seen_printing: &mut HashSet<i64>) -> Result<(), 
         }
     }
     Ok(())
+}
+
+/// What the printer's history says about the job's print: its task status, by the task id seen
+/// while it ran, or else by the file's name. `None` when the printer cannot be asked or has no
+/// entry for it.
+async fn recorded_outcome(state: &AppState, job: &Job) -> Option<i64> {
+    let client = state.printer.client()?;
+    let history = match client.task_history(HISTORY_PAGE).await {
+        Ok(history) => history,
+        Err(err) => {
+            tracing::warn!(job = job.id, %err, "reading the print history failed");
+            return None;
+        }
+    };
+    let filename = job.printer_filename();
+    history
+        .history_task_list
+        .iter()
+        .filter(|task| {
+            job.printer_task_uuid.as_deref() == Some(task.task_id.as_str())
+                || task.task_name == filename
+        })
+        .max_by_key(|task| task.end_time)
+        .map(|task| task.task_status)
+}
+
+/// The status stream reports `total_layer` 0, so the file's own metadata (1046) is where a
+/// layer total comes from. Asked once per file, whoever started the print.
+async fn refresh_file_layers(state: &AppState, snapshot: &PrinterSnapshot) {
+    let filename = match (&snapshot.link, &snapshot.status) {
+        (LinkState::Registered, Some(status)) => status.print_status.filename.clone(),
+        _ => return,
+    };
+    if filename.is_empty() {
+        state
+            .file_layers
+            .send_if_modified(|current| current.take().is_some());
+        return;
+    }
+    let known = state
+        .file_layers
+        .borrow()
+        .as_ref()
+        .is_some_and(|file| file.filename == filename);
+    if known {
+        return;
+    }
+    let Some(client) = state.printer.client() else {
+        return;
+    };
+    match client.file_detail(&filename).await {
+        Ok(detail) => {
+            if let Some(layers) = detail.layers().filter(|layers| *layers > 0) {
+                state
+                    .file_layers
+                    .send_replace(Some(FileLayers { filename, layers }));
+            }
+        }
+        Err(err) => tracing::debug!(%err, filename, "asking for the file's layer count failed"),
+    }
 }
 
 async fn follow(
@@ -212,10 +275,19 @@ async fn follow(
             let (outcome, error) = match machine.sub_status {
                 sub::COMPLETED if ours => (JobState::Done, None),
                 sub::STOPPED if ours => (JobState::Cancelled, None),
-                _ => (
-                    JobState::Failed,
-                    Some("The printer stopped without finishing the print."),
-                ),
+                // Firmware 02.01.00.00 goes to plain idle and clears the filename, so the
+                // print's own history entry is the only thing left that says how it ended.
+                _ => match recorded_outcome(state, job).await {
+                    Some(task_status::COMPLETED) => (JobState::Done, None),
+                    Some(_) => (
+                        JobState::Failed,
+                        Some("The printer's history says the print did not finish."),
+                    ),
+                    None => (
+                        JobState::Failed,
+                        Some("The printer stopped without finishing the print."),
+                    ),
+                },
             };
             let progress = if outcome == JobState::Done {
                 100
@@ -223,6 +295,8 @@ async fn follow(
                 job.progress
             };
             jobs::finish(&state.db, job, outcome, progress, error, now).await?;
+            // Whatever the outcome, something is on the bed until somebody says otherwise.
+            jobs::set_bed_clear(&state.db, false, None, now).await?;
             seen_printing.remove(&job.id);
             tracing::info!(
                 job = job.id,

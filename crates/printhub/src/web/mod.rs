@@ -34,7 +34,7 @@ use crate::{
     accounts::{self, Role},
     auth::{self, LoginLimiter},
     camera::{self, CameraHub},
-    cc2::{LinkState, upload::Uploader},
+    cc2::{LinkState, PrinterSnapshot, upload::Uploader},
     config::Config,
     dispatcher,
     inventory::{self, Binding, InventoryError},
@@ -71,8 +71,38 @@ pub struct Shared {
     bindings_reload: Mutex<()>,
     /// The nozzle people recorded as mounted, so the printer card needs no query to show it.
     pub nozzle: watch::Sender<MountedNozzle>,
+    /// What the printer answered about the printing file's layer count (method 1046), kept so
+    /// the card needs no request per status update.
+    pub file_layers: watch::Sender<Option<FileLayers>>,
     /// Wakes the dispatcher after a change it would otherwise only notice on its next tick.
     pub queue_changed: Notify,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FileLayers {
+    pub filename: String,
+    pub layers: i64,
+}
+
+/// The layer total for the printer card: what the printer says about the file it is printing,
+/// falling back to the count PrintHub read from the running job's own G-code. The live status
+/// carries `total_layer` 0 on firmware 02.01.00.00, so neither is redundant: a print started
+/// outside PrintHub has no job to ask.
+pub async fn layer_total(state: &AppState, snapshot: &PrinterSnapshot) -> Option<i64> {
+    let filename = match &snapshot.status {
+        Some(status) if !status.print_status.filename.is_empty() => &status.print_status.filename,
+        _ => return None,
+    };
+    let known = state
+        .file_layers
+        .borrow()
+        .as_ref()
+        .filter(|file| &file.filename == filename)
+        .map(|file| file.layers);
+    match known {
+        Some(layers) => Some(layers),
+        None => jobs::printing_layers(&state.db).await.unwrap_or_default(),
+    }
 }
 
 impl Deref for AppState {
@@ -120,6 +150,7 @@ impl AppState {
             bindings: watch::Sender::new(bindings),
             bindings_reload: Mutex::new(()),
             nozzle: watch::Sender::new(nozzle),
+            file_layers: watch::Sender::new(None),
             queue_changed: Notify::new(),
         })))
     }

@@ -10,12 +10,20 @@ pub const PAUSE_PRINT: u32 = 1021;
 pub const STOP_PRINT: u32 = 1022;
 pub const RESUME_PRINT: u32 = 1023;
 pub const SET_LIGHT: u32 = 1029;
+pub const PRINT_TASK_LIST: u32 = 1036;
 pub const VIDEO_STREAM: u32 = 1042;
 pub const GET_FILE_LIST: u32 = 1044;
 pub const GET_FILE_THUMBNAIL: u32 = 1045;
 pub const GET_FILE_DETAIL: u32 = 1046;
 pub const DELETE_FILE: u32 = 1047;
 pub const GET_CANVAS_STATUS: u32 = 2005;
+
+/// Page of the print history; one page is enough to find a print that just ended.
+#[derive(Serialize)]
+pub struct TaskPage {
+    pub page: i64,
+    pub page_size: i64,
+}
 
 pub const EVENT_STATUS: u32 = 6000;
 pub const EVENT_ATTRIBUTES: u32 = 6008;
