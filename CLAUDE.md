@@ -11,9 +11,13 @@ schedule allow, and statistics on who printed with whose filament. Rust (axum, a
 sqlx/SQLite, rumqttc), shipped as one Docker image configured by environment variables (see the
 table in `README.md`).
 
-**Nothing has run against the real printer yet.** Everything is verified against
-`crates/fakeprinter`, which models the documented protocol, not the firmware. The open
-questions that only the printer can answer are listed in `STATUS.md` under "Still unverified".
+**The printer is here and PrintHub has driven a real print end to end.** Several things the
+protocol notes claim turned out to be wrong on firmware 02.01.00.00 — how a print signals that
+it ended, `total_layer`, the camera, the light's parameter name — and what was learned is in
+`STATUS.md`. The tests still run against `crates/fakeprinter`, which models the documented
+protocol rather than the firmware, so a green suite is not evidence about the real CC2: what
+only the printer can settle is listed under "Still unverified", and the rule below about facts
+applies with full force.
 
 The deployment host (a Raspberry Pi 5) and every other HomeLab server are operated by the
 user. You cannot reach them: give the exact commands to run and ask for the output.
@@ -88,14 +92,18 @@ so a person keeps their colour across periods.
 **Slicing.** The OrcaSlicer CLI ignores `inherits`, so `slicer::ProfileLibrary` flattens every
 profile and writes it back marked `from: system` (the CLI only treats a process as compatible
 with a machine for system profiles). The machine profile is chosen per slice from the nozzle
-(`slicer::machine_name`); one slice runs at a time. Hard-won CLI facts are recorded in
-`STATUS.md` under Phase 4.
+(`slicer::machine_name`); one slice runs at a time. A scaled model is passed `--scale` *with*
+`--ensure-on-bed`, and only shrinks: above 1 the CLI segfaults in 2.4.2. Hard-won CLI facts are
+recorded in `STATUS.md` under Phase 4 and "Why scaling only shrinks"; check a CLI flag against
+the real binary before relying on it, because several are broken or absent.
 
 **Web.** Server-rendered askama templates with htmx. The printer card is re-rendered over SSE
 whenever a watch channel changes; forms must sit outside the SSE-swapped element or updates
 reset them. Every non-GET request must pass the same-origin guard (tests send an `Origin`
 header). Page outcomes are passed as fixed codes (`?done=`, `?problem=`) mapped to text, never
-as free text in the URL.
+as free text in the URL. The CSP has no `unsafe-inline`, so a page needing script gets a file in
+`static/` served through `web::assets` and pulled in with `{% block head %}`, as `upload.js`
+does; an inline `<script>` is silently blocked.
 
 **Help wiki.** Markdown pages in `crates/printhub/wiki/`, compiled in through `wiki::SOURCES`
 (slug = path, `index.md` = the directory) and photos through `wiki::IMAGES`, which carries each
