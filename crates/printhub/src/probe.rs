@@ -121,10 +121,12 @@ pub async fn run(config: &Config) -> anyhow::Result<ExitCode> {
             report.ok(
                 "status",
                 format!(
-                    "{:?} (sub-status {}), progress {}%, file {:?}",
+                    "{:?} (sub-status {}), progress {}%, layer {}/{}, file {:?}",
                     status.machine_status.state(),
                     status.machine_status.sub_status,
                     status.machine_status.progress,
+                    status.print_status.current_layer,
+                    status.print_status.total_layer,
                     status.print_status.filename,
                 ),
             );

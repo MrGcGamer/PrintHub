@@ -368,6 +368,14 @@ pub async fn list(db: &Db, finished: i64) -> Result<Vec<Job>, JobError> {
     Ok(rows.into_iter().map(Job::from).collect())
 }
 
+/// Layers of the job printing now, for the printer card: the printer's own total is 0.
+pub async fn printing_layers(db: &Db) -> Result<Option<i64>, JobError> {
+    let row = sqlx::query!("SELECT layers FROM jobs WHERE state = 'printing' ORDER BY id LIMIT 1")
+        .fetch_optional(db)
+        .await?;
+    Ok(row.and_then(|row| row.layers))
+}
+
 pub async fn in_state(db: &Db, state: JobState) -> Result<Vec<Job>, JobError> {
     let state = state.as_str();
     let rows = sqlx::query_as!(

@@ -48,6 +48,7 @@ pub async fn dashboard(
         &current.user,
         &bindings,
         &mounted,
+        jobs::printing_layers(&state.db).await?,
     );
     let nozzle_choices = may_record_nozzle.then(|| {
         Nozzle::ALL

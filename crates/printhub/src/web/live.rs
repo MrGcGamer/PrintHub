@@ -53,19 +53,27 @@ pub async fn printer_events(
         .map(|_| ())
         .merge(WatchStream::new(bindings.clone()).map(|_| ()))
         .merge(WatchStream::new(nozzle.clone()).map(|_| ()));
-    let stream = changes.throttle(Duration::from_millis(500)).map(move |()| {
-        let snapshot = printer.borrow().clone();
-        let bindings = bindings.borrow().clone();
-        let mounted = nozzle.borrow().clone();
-        let partial = PrinterCardPartial {
-            card: PrinterCard::new(&snapshot, &user, &bindings, &mounted),
-        };
-        let html = partial.render().unwrap_or_else(|err| {
-            tracing::error!(%err, "rendering printer card");
-            String::new()
+    let stream = changes
+        .throttle(Duration::from_millis(500))
+        .then(move |()| {
+            let (state, user) = (state.clone(), user.clone());
+            let (printer, bindings, nozzle) = (printer.clone(), bindings.clone(), nozzle.clone());
+            async move {
+                let snapshot = printer.borrow().clone();
+                let bindings = bindings.borrow().clone();
+                let mounted = nozzle.borrow().clone();
+                // The printer sends no layer total, so the card needs the job's own count.
+                let job_layers = jobs::printing_layers(&state.db).await.unwrap_or_default();
+                let partial = PrinterCardPartial {
+                    card: PrinterCard::new(&snapshot, &user, &bindings, &mounted, job_layers),
+                };
+                let html = partial.render().unwrap_or_else(|err| {
+                    tracing::error!(%err, "rendering printer card");
+                    String::new()
+                });
+                Ok(Event::default().event("printer").data(html))
+            }
         });
-        Ok(Event::default().event("printer").data(html))
-    });
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 

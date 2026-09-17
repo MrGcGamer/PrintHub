@@ -55,6 +55,7 @@ impl PrinterCard {
         user: &User,
         bindings: &[Binding],
         mounted: &MountedNozzle,
+        job_layers: Option<i64>,
     ) -> Self {
         let nozzle_size = format!("{} mm", mounted.nozzle.as_str());
         let nozzle_note = match &mounted.recorded {
@@ -108,8 +109,7 @@ impl PrinterCard {
             paused: busy && matches!(machine.sub_status, sub::PAUSED | sub::PAUSED_ALT),
             progress: (busy || finished).then_some(machine.progress.clamp(0, 100)),
             filename: print.filename.clone(),
-            layers: (print.total_layer > 0)
-                .then(|| format!("{} of {}", print.current_layer, print.total_layer)),
+            layers: layer_line(print.current_layer, print.total_layer, job_layers),
             remaining: (busy && print.remaining_time_sec > 0)
                 .then(|| human_duration(print.remaining_time_sec)),
             nozzle: Some(temperature(&status.extruder)),
@@ -119,6 +119,21 @@ impl PrinterCard {
             trays,
             can_control: connected && user.is_admin(),
         }
+    }
+}
+
+/// Firmware 02.01.00.00 counts `current_layer` up but leaves `total_layer` at 0, so the total
+/// falls back to the layer count PrintHub read from the job's own G-code.
+fn layer_line(current: i64, total: i64, job_layers: Option<i64>) -> Option<String> {
+    if current <= 0 {
+        return None;
+    }
+    match (total > 0)
+        .then_some(total)
+        .or(job_layers.filter(|n| *n > 0))
+    {
+        Some(total) => Some(format!("{current} of {total}")),
+        None => Some(current.to_string()),
     }
 }
 
@@ -265,6 +280,16 @@ pub fn format_time(unix: i64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_layer_line_falls_back_to_the_job() {
+        use super::layer_line;
+        assert_eq!(layer_line(29, 267, None).as_deref(), Some("29 of 267"));
+        assert_eq!(layer_line(29, 0, Some(267)).as_deref(), Some("29 of 267"));
+        assert_eq!(layer_line(29, 0, None).as_deref(), Some("29"));
+        assert_eq!(layer_line(29, 0, Some(0)).as_deref(), Some("29"));
+        assert_eq!(layer_line(0, 0, Some(267)), None, "not printing yet");
+    }
+
     use super::*;
     use crate::cc2::model::MachineStatus;
 

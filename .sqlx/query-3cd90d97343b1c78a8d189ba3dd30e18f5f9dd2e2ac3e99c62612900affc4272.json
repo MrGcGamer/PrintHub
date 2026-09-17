@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT layers FROM jobs WHERE state = 'printing' ORDER BY id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "layers",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "layers"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "3cd90d97343b1c78a8d189ba3dd30e18f5f9dd2e2ac3e99c62612900affc4272"
+}
