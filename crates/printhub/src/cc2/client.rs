@@ -262,6 +262,12 @@ impl PrinterClient {
         self.request(methods::STOP_PRINT, Empty {}).await.map(drop)
     }
 
+    pub async fn set_light(&self, on: bool) -> Result<(), CommandError> {
+        self.request(methods::SET_LIGHT, methods::SetLight { power: on.into() })
+            .await
+            .map(drop)
+    }
+
     pub async fn set_video_stream(&self, enable: bool) -> Result<(), CommandError> {
         self.request(methods::VIDEO_STREAM, VideoStream { enable })
             .await

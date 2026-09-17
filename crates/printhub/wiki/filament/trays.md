@@ -1,7 +1,7 @@
 ---
 title: Trays
 summary: Telling PrintHub which spool is in which CANVAS tray, and when it forgets.
-keywords: tray, trays, canvas, ams, load, bind, set spool, clear, refresh, mismatch, rfid, A1
+keywords: tray, trays, canvas, ams, load, bind, set spool, add spool, new spool, clear, refresh, mismatch, rfid, A1
 order: 2
 ---
 The printer reports whether each tray of its CANVAS holds filament, and a type and colour: read
@@ -18,6 +18,11 @@ material first, closest colour first.
 
 A spool is in one tray at most: setting it on a second tray takes it out of the first, and
 setting a tray replaces the spool that was there.
+
+A tray holding filament no spool is recorded for offers *Add this as a spool*, which opens the
+[new spool form](/wiki/filament/spools) with the material, brand and colour the printer reports
+already filled in, and sets the spool on that tray once it is saved. The printer reports no
+weight and no price, so those stay to be entered.
 
 > Set the spool every time you load one, even the same kind as before. PrintHub cannot see a
 > swap, and deducts the next print's filament from whichever spool is set.

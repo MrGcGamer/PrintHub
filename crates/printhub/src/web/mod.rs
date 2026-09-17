@@ -229,6 +229,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/jobs/new", get(queue::new_job_page))
         .route("/jobs/{id}", get(queue::job_page))
+        .route("/jobs/{id}/files/{kind}", get(queue::job_file))
         .route("/jobs/{id}/confirm", post(queue::confirm_job))
         .route("/jobs/{id}/cancel", post(queue::cancel_job))
         .route("/jobs/{id}/requeue", post(queue::requeue_job))

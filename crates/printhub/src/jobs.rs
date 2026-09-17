@@ -120,6 +120,8 @@ pub struct Job {
     pub filament_profile: Option<String>,
     pub supports: Option<bool>,
     pub infill_percent: Option<i64>,
+    /// Uniform scale applied when slicing, in percent; `None` means the model was not scaled.
+    pub scale_percent: Option<f64>,
     pub estimated_seconds: Option<i64>,
     pub layers: Option<i64>,
     pub printer_task_uuid: Option<String>,
@@ -191,6 +193,8 @@ pub struct NewJob<'a> {
     pub filament_profile: Option<&'a str>,
     pub supports: Option<bool>,
     pub infill_percent: Option<u8>,
+    /// `None` or 100 leaves the model at its own size.
+    pub scale_percent: Option<f64>,
 }
 
 /// A new job starts slicing (STL) or waiting for confirmation (G-code).
@@ -205,8 +209,8 @@ pub async fn create(db: &Db, job: &NewJob<'_>, now: i64) -> Result<i64, JobError
     let infill = job.infill_percent.map(i64::from);
     let inserted = sqlx::query!(
         "INSERT INTO jobs (owner_id, name, source, state, position, process_profile,
-                           filament_profile, supports, infill_percent, created_at)
-         VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM jobs), ?, ?, ?, ?, ?)",
+                           filament_profile, supports, infill_percent, scale_percent, created_at)
+         VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM jobs), ?, ?, ?, ?, ?, ?)",
         job.owner_id,
         job.name,
         source,
@@ -215,6 +219,7 @@ pub async fn create(db: &Db, job: &NewJob<'_>, now: i64) -> Result<i64, JobError
         job.filament_profile,
         supports,
         infill,
+        job.scale_percent,
         now,
     )
     .execute(db)
@@ -281,6 +286,7 @@ struct JobRow {
     filament_profile: Option<String>,
     supports: Option<i64>,
     infill_percent: Option<i64>,
+    scale_percent: Option<f64>,
     estimated_seconds: Option<i64>,
     layers: Option<i64>,
     printer_task_uuid: Option<String>,
@@ -311,6 +317,7 @@ impl From<JobRow> for Job {
             filament_profile: row.filament_profile,
             supports: row.supports.map(|s| s != 0),
             infill_percent: row.infill_percent,
+            scale_percent: row.scale_percent,
             estimated_seconds: row.estimated_seconds,
             layers: row.layers,
             printer_task_uuid: row.printer_task_uuid,
@@ -330,7 +337,7 @@ pub async fn get(db: &Db, id: i64) -> Result<Option<Job>, JobError> {
         JobRow,
         r#"SELECT j.id AS "id!", j.owner_id, u.username AS "owner_name?", j.name, j.source,
                   j.state, j.position, j.process_profile, j.filament_profile, j.supports,
-                  j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
+                  j.infill_percent, j.scale_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
                   j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm,
                   j.plate
            FROM jobs j LEFT JOIN users u ON u.id = j.owner_id
@@ -348,7 +355,7 @@ pub async fn list(db: &Db, finished: i64) -> Result<Vec<Job>, JobError> {
         JobRow,
         r#"SELECT j.id AS "id!", j.owner_id, u.username AS "owner_name?", j.name, j.source,
                   j.state, j.position, j.process_profile, j.filament_profile, j.supports,
-                  j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
+                  j.infill_percent, j.scale_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
                   j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm,
                   j.plate
            FROM jobs j LEFT JOIN users u ON u.id = j.owner_id
@@ -382,7 +389,7 @@ pub async fn in_state(db: &Db, state: JobState) -> Result<Vec<Job>, JobError> {
         JobRow,
         r#"SELECT j.id AS "id!", j.owner_id, u.username AS "owner_name?", j.name, j.source,
                   j.state, j.position, j.process_profile, j.filament_profile, j.supports,
-                  j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
+                  j.infill_percent, j.scale_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,
                   j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm,
                   j.plate
            FROM jobs j LEFT JOIN users u ON u.id = j.owner_id
@@ -918,6 +925,7 @@ mod tests {
             filament_profile: None,
             supports: None,
             infill_percent: None,
+            scale_percent: None,
         }
     }
 
@@ -1255,6 +1263,7 @@ mod tests {
             filament_profile: None,
             supports: None,
             infill_percent: None,
+            scale_percent: None,
             estimated_seconds,
             layers: None,
             printer_task_uuid: None,

@@ -21,6 +21,12 @@
     {% if let Some(settings) = job.settings %}<dt>Settings</dt><dd>{{ settings }}</dd>{% endif %}
     {% if !job.estimate.is_empty() %}<dt>Estimate</dt><dd>{{ job.estimate }}</dd>{% endif %}
     {% if job.printing %}<dt>Progress</dt><dd>{{ job.progress }}%</dd>{% endif %}
+    {% if job.model_file.is_some() || job.gcode_file.is_some() %}
+    <dt>Files</dt><dd>
+      {% if let Some(model) = job.model_file %}<a href="/jobs/{{ job.id }}/files/model.stl" download="{{ model }}">{{ model }}</a>{% endif %}
+      {% if let Some(gcode) = job.gcode_file %}<a href="/jobs/{{ job.id }}/files/job.gcode" download="{{ gcode }}">{{ gcode }}</a>{% endif %}
+    </dd>
+    {% endif %}
   </dl>
 </section>
 {% if !tools.is_empty() %}

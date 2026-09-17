@@ -74,6 +74,7 @@ struct PrinterState {
     started: Vec<Value>,
     /// Finished prints, newest last, as method 1036 reports them.
     history: Vec<Value>,
+    led: i64,
     registration_reply: String,
     answer_pings: bool,
     requests_seen: Vec<u32>,
@@ -267,6 +268,7 @@ impl PrinterState {
             uploads: Vec::new(),
             started: Vec::new(),
             history: Vec::new(),
+            led: 0,
             registration_reply: "ok".into(),
             answer_pings: true,
             requests_seen: Vec::new(),
@@ -296,6 +298,7 @@ impl PrinterState {
             "extruder": {"temperature": 25.0, "target": 0},
             "heater_bed": {"temperature": 25.0, "target": 0},
             "external_device": {"camera": true, "u_disk": false, "type": "0303"},
+            "led": {"status": self.led},
         })
     }
 }
@@ -493,6 +496,13 @@ impl Shared {
                 )
             }
             1021..=1023 => (json!({"error_code": 1010}), None),
+            1029 => {
+                state.led = params["power"].as_i64().unwrap_or_default();
+                (
+                    json!({"error_code": 0}),
+                    Some(json!({"led": {"status": state.led}})),
+                )
+            }
             1042 => (json!({"error_code": 0}), None),
             _ => (json!({"error_code": 1001}), None),
         }

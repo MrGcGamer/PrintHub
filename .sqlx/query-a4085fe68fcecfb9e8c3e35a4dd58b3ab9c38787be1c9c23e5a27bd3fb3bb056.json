@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO jobs (owner_id, name, source, state, position, process_profile,\n                           filament_profile, supports, infill_percent, scale_percent, created_at)\n         VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM jobs), ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "a4085fe68fcecfb9e8c3e35a4dd58b3ab9c38787be1c9c23e5a27bd3fb3bb056"
+}

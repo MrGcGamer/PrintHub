@@ -1,7 +1,7 @@
 ---
 title: Print queue
 summary: How a job moves from upload to finished, and what can be done with it on the way.
-keywords: job, jobs, state, status, confirm, cancel, stop, retry, requeue, order, move, reorder
+keywords: job, jobs, state, status, confirm, cancel, stop, retry, requeue, order, move, reorder, download, file, stl, gcode
 order: 2
 ---
 The queue page lists every unfinished job, in the order they will be tried, and the 20 that
@@ -43,6 +43,12 @@ spool is ready.
 
 Admins move queued jobs up and down with the arrows. A job queued again, by a retry, goes to the
 back.
+
+## Files
+
+A job's page links its files under *Files*: the model as uploaded, and the G-code, once there is
+some. They download under the name the job was uploaded with. Anyone logged in can take them,
+which is the way to reslice someone else's model yourself or to check what the printer was sent.
 
 ## Cancelling and stopping
 

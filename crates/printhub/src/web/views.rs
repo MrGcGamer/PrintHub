@@ -27,6 +27,8 @@ pub struct PrinterCard {
     pub bed: Option<String>,
     pub trays: Vec<TrayView>,
     pub can_control: bool,
+    /// The chamber light, when the printer has reported its state.
+    pub light: Option<bool>,
 }
 
 pub struct TrayView {
@@ -93,6 +95,7 @@ impl PrinterCard {
                 bed: None,
                 trays,
                 can_control: false,
+                light: None,
             };
         };
 
@@ -118,6 +121,7 @@ impl PrinterCard {
             bed: Some(temperature(&status.heater_bed)),
             trays,
             can_control: connected && user.is_admin(),
+            light: connected.then_some(status.led.status > 0),
         }
     }
 }

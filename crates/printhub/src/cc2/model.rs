@@ -11,6 +11,7 @@ pub struct StatusView {
     pub extruder: Heater,
     pub heater_bed: Heater,
     pub external_device: ExternalDevice,
+    pub led: Led,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
@@ -57,6 +58,15 @@ pub struct PrintStatus {
 pub struct Heater {
     pub temperature: f64,
     pub target: f64,
+}
+
+/// `status` is 0 or 1 on firmware 02.01.00.00; the protocol note says it may be a 0-255
+/// brightness on others, so anything above 0 counts as on.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
+#[serde(default)]
+pub struct Led {
+    #[serde(deserialize_with = "lenient::int")]
+    pub status: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]

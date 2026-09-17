@@ -82,7 +82,10 @@ pub async fn control(
     current: CurrentUser,
     Path(action): Path<String>,
 ) -> Result<Response, AppError> {
-    if !current.user.is_admin() {
+    // The light changes nothing about a print, and the camera view is useless in the dark, so
+    // it is the one control everybody holds.
+    let light = matches!(action.as_str(), "light-on" | "light-off");
+    if !light && !current.user.is_admin() {
         let printing = jobs::in_state(&state.db, JobState::Printing).await?;
         if !printing
             .iter()
@@ -98,6 +101,8 @@ pub async fn control(
         "pause" => (client.pause().await, "Pause sent."),
         "resume" => (client.resume().await, "Resume sent."),
         "stop" => (client.stop().await, "Stop sent."),
+        "light-on" => (client.set_light(true).await, "Light on."),
+        "light-off" => (client.set_light(false).await, "Light off."),
         _ => return Err(AppError::NotFound),
     };
     match result {

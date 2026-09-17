@@ -1,15 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Upload a job · PrintHub{% endblock %}
+{% block head %}<script src="/static/upload.js" defer></script>{% endblock %}
 {% block content %}
-<form method="post" action="/jobs" enctype="multipart/form-data" class="panel narrow">
+<form method="post" action="/jobs" enctype="multipart/form-data" class="panel narrow upload">
   <h1>Upload a job <a class="help" href="/wiki/queue/upload" aria-label="Help: uploading a job" target="_blank" rel="noopener">?</a></h1>
   {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-  <label>File <a class="help" href="/wiki/queue/upload#model-or-g-code" aria-label="Help: model or G-code" target="_blank" rel="noopener">?</a>
+  <label class="dropzone">File <a class="help" href="/wiki/queue/upload#model-or-g-code" aria-label="Help: model or G-code" target="_blank" rel="noopener">?</a>
     <input type="file" name="file" accept="{% if stl_enabled %}.stl,{% endif %}.gcode" required>
+    <span class="muted drop-hint">or drop it here</span>
   </label>
+  <p class="muted model-size" role="status" hidden></p>
   <p class="muted">{% if stl_enabled %}An STL model is sliced here for the mounted {{ nozzle }} mm nozzle, with the settings below. {% endif %}G-code must already be sliced for the Centauri Carbon 2. Up to {{ max_mb }} MB.</p>
   {% if stl_enabled %}
-  <fieldset>
+  <fieldset class="slicing">
     <legend>Slicing a model</legend>
     <label>Spool <a class="help" href="/wiki/queue/upload#spool" aria-label="Help: spool" target="_blank" rel="noopener">?</a>
       <select name="spool_id">
@@ -34,6 +37,9 @@
     </label>
     <label>Infill (%) <a class="help" href="/wiki/queue/upload#infill" aria-label="Help: infill" target="_blank" rel="noopener">?</a>
       <input name="infill" value="{{ infill }}" inputmode="numeric">
+    </label>
+    <label>Scale (%) <span class="muted">(shrinks only, 1 to 100)</span> <a class="help" href="/wiki/queue/upload#scale" aria-label="Help: scale" target="_blank" rel="noopener">?</a>
+      <input name="scale_percent" value="{{ scale_percent }}" inputmode="decimal">
     </label>
     <label class="check"><input type="checkbox" name="supports"{% if supports %} checked{% endif %}> Supports</label><a class="help" href="/wiki/queue/upload#supports" aria-label="Help: supports" target="_blank" rel="noopener">?</a>
   </fieldset>

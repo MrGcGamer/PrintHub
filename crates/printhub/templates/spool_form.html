@@ -4,6 +4,8 @@
 <form method="post" action="{{ action }}" class="panel narrow">
   <h1>{{ heading }} <a class="help" href="/wiki/filament/spools#fields" aria-label="Help: spool fields" target="_blank" rel="noopener">?</a></h1>
   {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  {% if let Some(canvas) = form.canvas %}<input type="hidden" name="canvas" value="{{ canvas }}">{% endif %}
+  {% if let Some(tray) = form.tray %}<input type="hidden" name="tray" value="{{ tray }}">{% endif %}
   <label>Material <a class="help" href="/wiki/filament#material-names" aria-label="Help: material names" target="_blank" rel="noopener">?</a>
     <input name="material" value="{{ form.material }}" list="materials" maxlength="64" autocomplete="off" required>
   </label>

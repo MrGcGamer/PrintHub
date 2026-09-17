@@ -33,6 +33,11 @@
   {% endfor %}
 </ul>
 {% endif %}
+{% if let Some(light) = card.light %}
+<div class="controls">
+  <button class="secondary" hx-post="/printer/light-{% if light %}off{% else %}on{% endif %}" hx-target="#control-result">Turn the light {% if light %}off{% else %}on{% endif %}</button>
+</div>
+{% endif %}
 {% if card.can_control && card.busy %}
 <div class="controls">
   {% if card.paused %}

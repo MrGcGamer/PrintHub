@@ -1,7 +1,7 @@
 ---
 title: Printer
 summary: The dashboard's live printer card, its controls and the camera.
-keywords: dashboard, status, card, connection, connected, refused, temperature, pause, resume, stop, camera, snapshot, live view
+keywords: dashboard, status, card, connection, connected, refused, temperature, pause, resume, stop, light, led, lamp, camera, snapshot, live view
 order: 1
 ---
 The dashboard shows the printer as PrintHub sees it. The card updates by itself; there is no
@@ -41,6 +41,12 @@ Pause and resume only send the command; the card's heading shows when the printe
 A stopped print cannot be resumed. Its job ends as Cancelled, and the filament it used up to
 that point is charged to the spools, as described under
 [How prints use filament](/wiki/filament/weighing#how-prints-use-filament).
+
+## Light
+
+The button turns the printer's chamber light on and off, whoever is logged in: it changes
+nothing about a print, and the camera shows very little in the dark. The card follows the
+light's real state, so it also shows when someone switched it at the printer itself.
 
 ## Camera
 

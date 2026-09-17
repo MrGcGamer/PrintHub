@@ -34,7 +34,7 @@
           {% endif %}
         </td>
         <td>{{ row.joined }}</td>
-        <td class="actions">
+        <td class="actions"><div class="row-actions">
           {% if !row.is_admin %}
           <form method="post" action="/admin/users/{{ row.id }}/role">
             <input type="hidden" name="role" value="admin">
@@ -50,7 +50,7 @@
           <form method="post" action="/admin/users/{{ row.id }}/reset">
             <button class="secondary">Password reset link</button>
           </form>
-        </td>
+        </div></td>
       </tr>
       {% endfor %}
     </tbody>

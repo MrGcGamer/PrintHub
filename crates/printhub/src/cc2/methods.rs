@@ -101,6 +101,13 @@ pub struct VideoStream {
     pub enable: bool,
 }
 
+/// The protocol note documents `brightness`, but Elegoo's own web interface sends `power`,
+/// 0 or 1, and that is what firmware 02.01.00.00 answers to.
+#[derive(Debug, Serialize)]
+pub struct SetLight {
+    pub power: i64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct StartPrint<'a> {
     pub storage_media: &'a str,

@@ -1,7 +1,7 @@
 ---
 title: Uploading a job
 summary: Model or G-code, and what each slicing setting does.
-keywords: upload, stl, gcode, g-code, 3mf, slice, slicer, orcaslicer, build plate, plate, bed temperature, print profile, filament profile, infill, supports, layer height, file size, multicolour, multi-colour
+keywords: upload, stl, gcode, g-code, 3mf, slice, slicer, orcaslicer, build plate, plate, bed temperature, print profile, filament profile, infill, supports, scale, resize, size, dimensions, drag and drop, layer height, file size, multicolour, multi-colour
 order: 1
 ---
 ## Model or G-code
@@ -19,6 +19,9 @@ every colour through one nozzle. Fewer colour changes waste less.
 
 Other file types, such as 3MF projects, are not accepted. If the form offers no slicing settings,
 this PrintHub cannot slice and takes G-code only.
+
+The file can be dropped on the *File* box as well as chosen through it. Once a model is
+chosen, the form gives its size in millimetres, measured in the browser from the file itself.
 
 ## Slicing settings
 
@@ -61,6 +64,19 @@ PLA or a *Rapid* filament, and use a *Generic* profile for materials Elegoo has 
 How much of the inside is filled, in percent. 0 leaves only the walls, top and bottom; 100 is
 solid. More infill makes a part heavier and slower to print, and past a point stronger walls
 help more than more infill, but wall counts can only be changed in G-code you slice yourself.
+
+### Scale
+
+Shrinks the model in all three directions by the same percentage, from 1 to 100; 100 prints it
+at its own size. The size line under the file follows what is typed here, so the printed
+measurements can be checked before uploading.
+
+> A model cannot be enlarged here. OrcaSlicer's command line crashes on any factor above 1, and
+> the fix for it has not reached a release yet. Enlarge in your own slicer and upload the
+> G-code instead.
+
+Shrinking saves less filament than it looks: walls and the top and bottom keep their thickness,
+so a part at 50 % uses well over an eighth of the filament.
 
 ### Supports
 

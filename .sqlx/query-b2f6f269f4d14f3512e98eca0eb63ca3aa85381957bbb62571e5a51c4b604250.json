@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT j.id AS \"id!\", j.owner_id, u.username AS \"owner_name?\", j.name, j.source,\n                  j.state, j.position, j.process_profile, j.filament_profile, j.supports,\n                  j.infill_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,\n                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm,\n                  j.plate\n           FROM jobs j LEFT JOIN users u ON u.id = j.owner_id\n           WHERE j.state = ?\n           ORDER BY j.position, j.id",
+  "query": "SELECT j.id AS \"id!\", j.owner_id, u.username AS \"owner_name?\", j.name, j.source,\n                  j.state, j.position, j.process_profile, j.filament_profile, j.supports,\n                  j.infill_percent, j.scale_percent, j.estimated_seconds, j.layers, j.printer_task_uuid,\n                  j.progress, j.error, j.created_at, j.started_at, j.finished_at, j.nozzle_mm,\n                  j.plate\n           FROM jobs j LEFT JOIN users u ON u.id = j.owner_id\n           WHERE j.state NOT IN ('done', 'failed', 'cancelled')\n              OR j.id IN (SELECT id FROM jobs WHERE state IN ('done', 'failed', 'cancelled')\n                          ORDER BY finished_at DESC, id DESC LIMIT ?)\n           ORDER BY CASE j.state WHEN 'printing' THEN 0 WHEN 'uploading' THEN 0\n                                 WHEN 'queued' THEN 1 WHEN 'awaiting_confirm' THEN 2\n                                 WHEN 'slicing' THEN 2 ELSE 3 END,\n                    CASE WHEN j.state IN ('done', 'failed', 'cancelled')\n                         THEN -j.finished_at ELSE j.position END,\n                    j.id",
   "describe": {
     "columns": [
       {
@@ -125,8 +125,19 @@
         }
       },
       {
-        "name": "estimated_seconds",
+        "name": "scale_percent",
         "ordinal": 11,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "jobs",
+            "name": "scale_percent"
+          }
+        }
+      },
+      {
+        "name": "estimated_seconds",
+        "ordinal": 12,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -137,7 +148,7 @@
       },
       {
         "name": "layers",
-        "ordinal": 12,
+        "ordinal": 13,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -148,7 +159,7 @@
       },
       {
         "name": "printer_task_uuid",
-        "ordinal": 13,
+        "ordinal": 14,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -159,7 +170,7 @@
       },
       {
         "name": "progress",
-        "ordinal": 14,
+        "ordinal": 15,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -170,7 +181,7 @@
       },
       {
         "name": "error",
-        "ordinal": 15,
+        "ordinal": 16,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -181,7 +192,7 @@
       },
       {
         "name": "created_at",
-        "ordinal": 16,
+        "ordinal": 17,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -192,7 +203,7 @@
       },
       {
         "name": "started_at",
-        "ordinal": 17,
+        "ordinal": 18,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -203,7 +214,7 @@
       },
       {
         "name": "finished_at",
-        "ordinal": 18,
+        "ordinal": 19,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -214,7 +225,7 @@
       },
       {
         "name": "nozzle_mm",
-        "ordinal": 19,
+        "ordinal": 20,
         "type_info": "Float",
         "origin": {
           "Table": {
@@ -225,7 +236,7 @@
       },
       {
         "name": "plate",
-        "ordinal": 20,
+        "ordinal": 21,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -253,6 +264,7 @@
       true,
       true,
       true,
+      true,
       false,
       false,
       false,
@@ -262,5 +274,5 @@
       true
     ]
   },
-  "hash": "998909c10d0ced6893e25d050130eb29f16cdba3094541da37039fb85782827d"
+  "hash": "b2f6f269f4d14f3512e98eca0eb63ca3aa85381957bbb62571e5a51c4b604250"
 }

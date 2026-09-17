@@ -6,12 +6,13 @@ use std::{collections::HashMap, path::Path};
 use askama::Template;
 use axum::{
     Form,
+    body::Body,
     extract::{Multipart, Path as UrlPath, Query, State},
-    http::StatusCode,
+    http::{StatusCode, header},
     response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use super::{
     AppState,
@@ -35,6 +36,7 @@ use crate::{
 /// Finished jobs listed under the queue.
 const RECENT_FINISHED: i64 = 20;
 const DEFAULT_INFILL: &str = "15";
+const DEFAULT_SCALE: &str = "100";
 
 fn can_manage(user: &User, job: &Job) -> bool {
     user.is_admin() || job.owner_id() == Some(user.id)
@@ -148,6 +150,7 @@ struct NewJobPage {
     filaments: Vec<Choice>,
     supports: bool,
     infill: String,
+    scale_percent: String,
     error: Option<String>,
 }
 
@@ -241,6 +244,11 @@ async fn new_job_form(
             DEFAULT_INFILL.to_owned()
         } else {
             field("infill").to_owned()
+        },
+        scale_percent: if field("scale_percent").is_empty() {
+            DEFAULT_SCALE.to_owned()
+        } else {
+            field("scale_percent").to_owned()
         },
         error,
     };
@@ -411,6 +419,7 @@ async fn create_gcode_job(
         filament_profile: None,
         supports: None,
         infill_percent: None,
+        scale_percent: None,
     };
     let id = jobs::create(&state.db, &new, store::now()).await?;
     place(temp, &jobs::gcode_path(&state.config.data_dir, id)).await?;
@@ -472,6 +481,7 @@ async fn create_stl_job(
         .filter(|percent| *percent <= 100)
         .ok_or_else(|| user_problem("Infill is a percentage from 0 to 100."))?;
     let supports = upload.fields.contains_key("supports");
+    let scale_percent = parse_scale(field("scale_percent"))?;
 
     let new = NewJob {
         owner_id: user.id,
@@ -481,6 +491,7 @@ async fn create_stl_job(
         filament_profile: Some(&filament),
         supports: Some(supports),
         infill_percent: Some(infill),
+        scale_percent: (scale_percent != 100.0).then_some(scale_percent),
     };
     let id = jobs::create(&state.db, &new, store::now()).await?;
     place(temp, &jobs::model_path(&state.config.data_dir, id)).await?;
@@ -492,9 +503,34 @@ async fn create_stl_job(
         color_hex: spool.color_hex.clone(),
         supports,
         infill_percent: infill,
+        scale_percent,
     };
     tokio::spawn(dispatcher::slice_job(state.clone(), id, settings, spool.id));
     Ok(id)
+}
+
+/// Percent, blank meaning 100. Kept inside the slicer's own bounds, which today stop at 100:
+/// see `slicer::SCALE_MAX`.
+fn parse_scale(raw: &str) -> Result<f64, Problem> {
+    if raw.is_empty() {
+        return Ok(100.0);
+    }
+    raw.trim_end_matches('%')
+        .replace(',', ".")
+        .parse::<f64>()
+        .ok()
+        .filter(|percent| {
+            percent.is_finite()
+                && *percent >= slicer::SCALE_MIN * 100.0
+                && *percent <= slicer::SCALE_MAX * 100.0
+        })
+        .ok_or_else(|| {
+            user_problem(format!(
+                "Scale is a percentage from {:.0} to {:.0}.",
+                slicer::SCALE_MIN * 100.0,
+                slicer::SCALE_MAX * 100.0
+            ))
+        })
 }
 
 /// Elegoo's profile for the spool's material.
@@ -552,6 +588,9 @@ struct JobView {
     can_cancel: bool,
     can_requeue: bool,
     created: String,
+    /// Downloads, named as they would be saved. Absent while the file is not on disk yet.
+    model_file: Option<String>,
+    gcode_file: Option<String>,
 }
 
 struct ToolRow {
@@ -647,7 +686,7 @@ async fn job_detail(
 
     let settings = (job.source == Source::Stl).then(|| {
         format!(
-            "{}, {}, {}% infill, supports {}",
+            "{}, {}, {}% infill, supports {}{}",
             job.process_profile.as_deref().unwrap_or_default(),
             job.filament_profile.as_deref().unwrap_or_default(),
             job.infill_percent.unwrap_or_default(),
@@ -656,6 +695,9 @@ async fn job_detail(
             } else {
                 "off"
             },
+            job.scale_percent
+                .map(|percent| format!(", scaled to {percent}%"))
+                .unwrap_or_default(),
         )
     });
     let status = if error.is_some() {
@@ -683,6 +725,12 @@ async fn job_detail(
             can_cancel: manage && !job.state.is_finished() && job.state != JobState::Uploading,
             can_requeue: manage && job.state == JobState::Failed && !tools.is_empty(),
             created: views::format_time(job.created_at),
+            model_file: exists(&jobs::model_path(&state.config.data_dir, id))
+                .await
+                .then(|| download_name(&job.name, job.id, "stl")),
+            gcode_file: exists(&jobs::gcode_path(&state.config.data_dir, id))
+                .await
+                .then(|| download_name(&job.name, job.id, "gcode")),
             error: job.error,
             name: job.name,
         },
@@ -694,6 +742,87 @@ async fn job_detail(
         error,
     };
     Ok((status, render(&page)?).into_response())
+}
+
+/// A job's own files, for anyone logged in: everybody can already see every job.
+pub async fn job_file(
+    State(state): State<AppState>,
+    _current: CurrentUser,
+    UrlPath((id, kind)): UrlPath<(i64, String)>,
+) -> Result<Response, AppError> {
+    let job = jobs::get(&state.db, id).await?.ok_or(AppError::NotFound)?;
+    let (path, extension, content_type) = match kind.as_str() {
+        "model.stl" => (
+            jobs::model_path(&state.config.data_dir, id),
+            "stl",
+            "model/stl",
+        ),
+        "job.gcode" => (
+            jobs::gcode_path(&state.config.data_dir, id),
+            "gcode",
+            "text/x.gcode",
+        ),
+        _ => return Err(AppError::NotFound),
+    };
+    let file = tokio::fs::File::open(&path)
+        .await
+        .map_err(|_| AppError::NotFound)?;
+    let length = file.metadata().await.map(|meta| meta.len()).unwrap_or(0);
+    let name = download_name(&job.name, job.id, extension);
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type.to_owned()),
+            (header::CONTENT_LENGTH, length.to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{name}\""),
+            ),
+            (header::CACHE_CONTROL, "no-store".to_owned()),
+        ],
+        stream_file(file),
+    )
+        .into_response())
+}
+
+/// Reads in chunks: a sliced G-code runs to hundreds of megabytes, and the Pi5 serves it while
+/// a slice may be running.
+fn stream_file(file: tokio::fs::File) -> Body {
+    Body::from_stream(futures::stream::try_unfold(file, |mut file| async move {
+        let mut chunk = vec![0u8; 64 * 1024];
+        let read = file.read(&mut chunk).await?;
+        if read == 0 {
+            return Ok::<_, std::io::Error>(None);
+        }
+        chunk.truncate(read);
+        Ok(Some((bytes::Bytes::from(chunk), file)))
+    }))
+}
+
+/// The uploaded name with `extension` forced on it, reduced to characters that need no quoting
+/// inside a `Content-Disposition` filename.
+fn download_name(uploaded: &str, id: i64, extension: &str) -> String {
+    let stem = uploaded
+        .rsplit_once('.')
+        .map_or(uploaded, |(stem, _)| stem)
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ' ') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let stem = stem.trim();
+    if stem.is_empty() {
+        format!("printhub-{id}.{extension}")
+    } else {
+        format!("{stem}.{extension}")
+    }
+}
+
+async fn exists(path: &Path) -> bool {
+    tokio::fs::try_exists(path).await.unwrap_or(false)
 }
 
 async fn managed_job(state: &AppState, user: &User, id: i64) -> Result<Job, AppError> {

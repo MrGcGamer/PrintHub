@@ -92,6 +92,7 @@ async fn slice_selftest(config: &Config) -> anyhow::Result<ExitCode> {
         color_hex: "#2850DF".into(),
         supports: false,
         infill_percent: 15,
+        scale_percent: 100.0,
     };
     // An incompatible profile otherwise surfaces as a bare exit status from the CLI.
     for (kind, name, compatible) in [

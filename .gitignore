@@ -1,3 +1,5 @@
 /target
 /data
 /.env
+# OrcaSlicer drops its own log in whatever directory it is run from.
+/[0-9][0-9][0-9][0-9][0-9].log

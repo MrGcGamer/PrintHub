@@ -22,6 +22,12 @@ use crate::config::Nozzle;
 
 /// Deeper than any bundled chain (four levels in 2.4.2); anything past it is a loop.
 const MAX_INHERITANCE: usize = 16;
+/// A model can only be shrunk. `--scale` above 1 sinks the object below the bed before the
+/// plate is rebuilt, and `PartPlate::check_outside` then dereferences the GUI's null `m_plater`
+/// and takes the process with it. Fixed upstream in OrcaSlicer PR #14415, merged after 2.4.2;
+/// raise this to 10.0 once a release carries it.
+pub const SCALE_MIN: f64 = 0.01;
+pub const SCALE_MAX: f64 = 1.0;
 const OUTPUT_LINES: usize = 20;
 
 #[derive(Debug, Error)]
@@ -157,7 +163,7 @@ impl Plate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SliceSettings {
     pub nozzle: Nozzle,
     pub plate: Plate,
@@ -167,6 +173,8 @@ pub struct SliceSettings {
     pub color_hex: String,
     pub supports: bool,
     pub infill_percent: u8,
+    /// Uniform scale in percent. 100 passes the model through untouched.
+    pub scale_percent: f64,
 }
 
 pub struct Slicer {
@@ -248,7 +256,17 @@ impl Slicer {
             paths.push(path);
         }
 
-        let child = Command::new(&self.binary)
+        let mut command = Command::new(&self.binary);
+        // `--scale` alone scales about the object's centre and leaves it hanging off the bed;
+        // `--ensure-on-bed` seats it again afterwards, and both are needed for a right answer.
+        if (settings.scale_percent - 100.0).abs() > f64::EPSILON {
+            let factor = (settings.scale_percent / 100.0).clamp(SCALE_MIN, SCALE_MAX);
+            command
+                .arg("--scale")
+                .arg(format!("{factor}"))
+                .arg("--ensure-on-bed");
+        }
+        let child = command
             .arg("--datadir")
             .arg(&datadir)
             .args(["--slice", "1"])
@@ -491,6 +509,7 @@ mod tests {
             color_hex: "#2850DF".into(),
             supports: true,
             infill_percent: 25,
+            scale_percent: 100.0,
         }
     }
 
@@ -682,5 +701,18 @@ mod tests {
             assert_eq!(bed.as_deref(), Some(temperature), "{plate:?}");
             assert_eq!(info.layers, Some(166), "0.12 mm layers over 20 mm");
         }
+
+        // Half of the 20 mm cube is 10 mm, which at 0.20 mm layers is 50 of them. Without
+        // `--ensure-on-bed` the shrunk cube keeps its centre and prints 15 mm tall, so this
+        // also pins the seating, not only the size.
+        let (info, _) = slice(
+            "half",
+            SliceSettings {
+                scale_percent: 50.0,
+                ..settings()
+            },
+        )
+        .await;
+        assert_eq!(info.layers, Some(50), "0.20 mm layers over 10 mm");
     }
 }

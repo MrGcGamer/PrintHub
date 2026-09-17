@@ -313,6 +313,17 @@ impl App {
         })
     }
 
+    /// Polls until `done` holds, for anything the printer reports back asynchronously.
+    async fn wait_for<F: Future<Output = bool>>(&self, done: impl Fn() -> F) -> () {
+        timeout(WAIT, async {
+            while !done().await {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .expect("never got there")
+    }
+
     /// Reads a streaming response until `needle` appears in what has arrived.
     async fn read_until(response: reqwest::Response, needle: &str) -> String {
         let mut stream = response.bytes_stream();
@@ -1063,6 +1074,80 @@ async fn stl_uploads_are_sliced_for_the_chosen_spool() {
 }
 
 #[tokio::test]
+async fn job_files_download_under_the_uploaded_name() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let gcode = std::fs::read(CUBE_GCODE).unwrap();
+    let uploaded = app.upload(&admin, &[], "a cube!.gcode", &gcode).await;
+    assert_eq!(uploaded.status(), StatusCode::SEE_OTHER);
+    let job_path = uploaded.headers()[LOCATION].to_str().unwrap().to_owned();
+
+    let page = app.get(&job_path, Some(&admin)).await.text().await.unwrap();
+    assert!(page.contains("a cube_.gcode"), "{page}");
+    assert!(
+        !page.contains("files/model.stl"),
+        "a G-code job has no model: {page}"
+    );
+
+    let download = app
+        .get(&format!("{job_path}/files/job.gcode"), Some(&admin))
+        .await;
+    assert_eq!(download.status(), StatusCode::OK);
+    assert_eq!(
+        download.headers()["content-disposition"],
+        "attachment; filename=\"a cube_.gcode\"",
+        "the shell characters an upload may carry are dropped"
+    );
+    assert_eq!(download.bytes().await.unwrap().as_ref(), gcode.as_slice());
+
+    assert_eq!(
+        app.get(&format!("{job_path}/files/model.stl"), Some(&admin))
+            .await
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let anonymous = app.get(&format!("{job_path}/files/job.gcode"), None).await;
+    assert_eq!(anonymous.status(), StatusCode::SEE_OTHER);
+    assert_eq!(
+        anonymous.headers()[LOCATION],
+        "/login",
+        "sent to the login page rather than served"
+    );
+}
+
+#[tokio::test]
+async fn anyone_logged_in_switches_the_light() {
+    let app = app().await;
+    let sam = app.member("sam").await;
+
+    let dashboard = app.get("/", Some(&sam)).await.text().await.unwrap();
+    assert!(dashboard.contains("Turn the light on"), "{dashboard}");
+
+    let on = app.post("/printer/light-on", Some(&sam), &[]).await;
+    assert_eq!(on.status(), StatusCode::OK);
+    assert!(on.text().await.unwrap().contains("Light on."));
+    assert!(app.printer.requests_seen().contains(&1029));
+
+    app.wait_for(|| async {
+        app.get("/", Some(&sam))
+            .await
+            .text()
+            .await
+            .unwrap()
+            .contains("Turn the light off")
+    })
+    .await;
+
+    let off = app.post("/printer/light-off", Some(&sam), &[]).await;
+    assert!(off.text().await.unwrap().contains("Light off."));
+    assert_eq!(
+        app.post("/printer/pause", Some(&sam), &[]).await.status(),
+        StatusCode::FORBIDDEN,
+        "the light is the only control a member holds with no job printing"
+    );
+}
+
+#[tokio::test]
 async fn only_permitted_members_record_the_mounted_nozzle() {
     let app = app().await;
     let admin = app.login("admin", ADMIN_PASSWORD).await;
@@ -1269,6 +1354,7 @@ async fn statistics_show_whose_filament_was_used_and_what_is_owed() {
             filament_profile: None,
             supports: None,
             infill_percent: None,
+            scale_percent: None,
         },
         now - 3600,
     )

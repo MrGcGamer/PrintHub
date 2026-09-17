@@ -36,6 +36,9 @@ struct InventoryPage {
 struct TrayRow {
     tray: TrayView,
     choices: Vec<Choice>,
+    /// Filament in the tray that no spool is recorded for: the printer knows enough about it
+    /// to fill in a new spool.
+    unrecorded: bool,
 }
 
 struct Choice {
@@ -102,7 +105,12 @@ pub async fn inventory_page(
                     selected: bound.map_or(rank == 0, |id| id == spool.id),
                 })
                 .collect();
-            TrayRow { tray, choices }
+            let unrecorded = tray.loaded && tray.spool.is_none();
+            TrayRow {
+                tray,
+                choices,
+                unrecorded,
+            }
         })
         .collect();
 
@@ -203,6 +211,7 @@ pub async fn spool_page(
 ) -> Result<Response, AppError> {
     let notice = outcome.done.as_deref().and_then(|code| match code {
         "created" => Some("Spool added."),
+        "created-bound" => Some("Spool added and set in its tray."),
         "saved" => Some("Changes saved."),
         "weighed" => Some("Weigh-in recorded."),
         "archived" => Some("Spool archived."),
@@ -322,6 +331,9 @@ pub struct SpoolForm {
     notes: String,
     /// `None` when the form had no owner field, which keeps the owner; empty means shared.
     owner_id: Option<String>,
+    /// The tray the spool was read off, carried through so it is bound on creation.
+    canvas: Option<String>,
+    tray: Option<String>,
 }
 
 impl SpoolForm {
@@ -344,6 +356,8 @@ impl SpoolForm {
                     .map(|(id, _)| id.to_string())
                     .unwrap_or_default(),
             ),
+            canvas: None,
+            tray: None,
         }
     }
 
@@ -455,16 +469,41 @@ async fn editable(state: &AppState, user: &User, id: i64) -> Result<Spool, AppEr
     Ok(spool)
 }
 
+#[derive(Deserialize)]
+pub struct FromTray {
+    canvas: Option<i64>,
+    tray: Option<i64>,
+}
+
 pub async fn new_spool_page(
     State(state): State<AppState>,
     current: CurrentUser,
+    Query(from): Query<FromTray>,
 ) -> Result<Response, AppError> {
-    let form = SpoolForm {
+    let mut form = SpoolForm {
         color_hex: "#FFFFFF".to_owned(),
         initial_grams: "1000".to_owned(),
         owner_id: Some(current.user.id.to_string()),
         ..SpoolForm::default()
     };
+    if let (Some(canvas_id), Some(tray_id)) = (from.canvas, from.tray) {
+        let snapshot = state.printer.snapshot();
+        let reported = snapshot
+            .canvas
+            .as_ref()
+            .and_then(|canvas| inventory::find_tray(canvas, canvas_id, tray_id))
+            .filter(|tray| tray.has_filament());
+        if let Some(tray) = reported {
+            // Everything else stays at its default: the printer reports no weight or price, and
+            // `filament_name` is a material name, not a colour name.
+            form.material = tray.filament_type.clone();
+            form.brand = tray.brand.clone();
+            form.color_hex = inventory::normalize_color(&tray.filament_color)
+                .unwrap_or_else(|| form.color_hex.clone());
+            form.canvas = Some(canvas_id.to_string());
+            form.tray = Some(tray_id.to_string());
+        }
+    }
     form_page(&state, current.user, None, form, None).await
 }
 
@@ -480,6 +519,15 @@ pub async fn create_spool(
     let owner_id = chosen_owner(&state, &current.user, &form, None).await?;
     let id = inventory::create_spool(&state.db, &fields, owner_id, store::now()).await?;
     tracing::info!(username = %current.user.username, spool = id, "added a spool");
+    // Built from a tray's own filament, so it belongs in that tray. A tray emptied in the
+    // meantime just leaves the spool unbound.
+    if let (Some(canvas_id), Some(tray_id)) = (
+        form.canvas.as_deref().and_then(|raw| raw.parse().ok()),
+        form.tray.as_deref().and_then(|raw| raw.parse().ok()),
+    ) && bind_if_loaded(&state, canvas_id, tray_id, id).await?
+    {
+        return Ok(Redirect::to(&format!("/spools/{id}?done=created-bound")).into_response());
+    }
     Ok(Redirect::to(&format!("/spools/{id}?done=created")).into_response())
 }
 
@@ -594,12 +642,14 @@ pub struct BindForm {
 
 /// Only a tray with filament can take a spool: an empty tray's binding would be removed again
 /// by the next status update.
-pub async fn bind_tray(
-    State(state): State<AppState>,
-    current: CurrentUser,
-    Path((canvas_id, tray_id)): Path<(i64, i64)>,
-    Form(form): Form<BindForm>,
-) -> Result<Response, AppError> {
+/// Binds `spool_id` into the tray when the printer still reports filament in it. `false`
+/// means it does not, and nothing was written.
+async fn bind_if_loaded(
+    state: &AppState,
+    canvas_id: i64,
+    tray_id: i64,
+    spool_id: i64,
+) -> Result<bool, AppError> {
     let snapshot = state.printer.snapshot();
     let loaded = snapshot
         .canvas
@@ -607,12 +657,24 @@ pub async fn bind_tray(
         .and_then(|canvas| inventory::find_tray(canvas, canvas_id, tray_id))
         .is_some_and(Tray::has_filament);
     if !loaded {
+        return Ok(false);
+    }
+    inventory::bind(&state.db, canvas_id, tray_id, spool_id, store::now()).await?;
+    state.refresh_bindings().await?;
+    Ok(true)
+}
+
+pub async fn bind_tray(
+    State(state): State<AppState>,
+    current: CurrentUser,
+    Path((canvas_id, tray_id)): Path<(i64, i64)>,
+    Form(form): Form<BindForm>,
+) -> Result<Response, AppError> {
+    if !bind_if_loaded(&state, canvas_id, tray_id, form.spool_id).await? {
         return Err(AppError::BadRequest(
             "That tray has no filament in it.".to_owned(),
         ));
     }
-    inventory::bind(&state.db, canvas_id, tray_id, form.spool_id, store::now()).await?;
-    state.refresh_bindings().await?;
     tracing::info!(
         username = %current.user.username,
         spool = form.spool_id,

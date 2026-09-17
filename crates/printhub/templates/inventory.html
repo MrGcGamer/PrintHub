@@ -29,7 +29,7 @@
           <span class="muted">None</span>
           {% endif %}
         </td>
-        <td class="actions">
+        <td class="actions"><div class="row-actions">
           {% if row.tray.loaded && !row.choices.is_empty() %}
           <form method="post" action="/trays/{{ row.tray.canvas_id }}/{{ row.tray.tray_id }}/bind" class="inline-form">
             <label><span class="visually-hidden">Spool in tray {{ row.tray.label }}</span>
@@ -43,7 +43,10 @@
           {% if row.tray.spool.is_some() %}
           <form method="post" action="/trays/{{ row.tray.canvas_id }}/{{ row.tray.tray_id }}/unbind"><button class="secondary">Clear</button></form>
           {% endif %}
-        </td>
+          {% if row.unrecorded %}
+          <a href="/spools/new?canvas={{ row.tray.canvas_id }}&amp;tray={{ row.tray.tray_id }}">Add this as a spool</a>
+          {% endif %}
+        </div></td>
       </tr>
       {% endfor %}
     </tbody>

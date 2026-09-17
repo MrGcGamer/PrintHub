@@ -10,6 +10,7 @@ use crate::wiki;
 const HTMX: &[u8] = include_bytes!("../../static/htmx.min.js");
 const HTMX_SSE: &[u8] = include_bytes!("../../static/htmx-ext-sse.min.js");
 const STYLESHEET: &[u8] = include_bytes!("../../static/app.css");
+const UPLOAD_JS: &[u8] = include_bytes!("../../static/upload.js");
 const LOGO: &[u8] = include_bytes!("../../static/logo.svg");
 const FAVICON: &[u8] = include_bytes!("../../static/favicon.ico");
 const APPLE_TOUCH_ICON: &[u8] = include_bytes!("../../static/apple-touch-icon.png");
@@ -23,6 +24,7 @@ pub async fn serve(Path(file): Path<String>) -> Result<Response, AppError> {
         "htmx.min.js" => (HTMX, "text/javascript"),
         "htmx-ext-sse.min.js" => (HTMX_SSE, "text/javascript"),
         "app.css" => (STYLESHEET, "text/css"),
+        "upload.js" => (UPLOAD_JS, "text/javascript"),
         "logo.svg" => (LOGO, "image/svg+xml"),
         "apple-touch-icon.png" => (APPLE_TOUCH_ICON, "image/png"),
         "icon-192.png" => (ICON_192, "image/png"),
