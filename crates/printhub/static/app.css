@@ -70,7 +70,9 @@ a { color: var(--accent); }
 
 .bar nav { display: flex; align-items: center; gap: 1rem; }
 .bar form { margin: 0; }
-.brand { font-weight: 700; text-decoration: none; color: var(--text); }
+.brand { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 700; text-decoration: none; color: var(--text); }
+.brand img { display: block; }
+.login-logo { display: block; margin: 0 0 0.75rem; }
 
 main { max-width: 72rem; margin: 0 auto; padding: 1.25rem; }
 

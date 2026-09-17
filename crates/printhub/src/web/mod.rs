@@ -215,6 +215,7 @@ pub fn router(state: AppState) -> Router {
         .route("/camera/stream", get(live::camera_stream))
         .route("/camera/snapshot.jpg", get(live::camera_snapshot))
         .route("/static/{file}", get(assets::serve))
+        .route("/favicon.ico", get(assets::favicon))
         .route("/healthz", get(|| async { "ok" }))
         .layer(middleware::from_fn_with_state(
             state.clone(),

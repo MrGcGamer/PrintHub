@@ -2,6 +2,7 @@
 {% block title %}Log in · PrintHub{% endblock %}
 {% block content %}
 <form method="post" action="/login" class="panel narrow">
+  <img class="login-logo" src="/static/logo.svg" alt="" width="64" height="64">
   <h1>PrintHub</h1>
   {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <label>Username

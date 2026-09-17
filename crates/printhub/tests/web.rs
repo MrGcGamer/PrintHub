@@ -442,6 +442,42 @@ async fn security_headers_are_set() {
 }
 
 #[tokio::test]
+async fn every_linked_icon_is_served_without_login() {
+    let app = app().await;
+    let page = app.get("/login", None).await.text().await.unwrap();
+    let manifest: serde_json::Value = app
+        .get("/static/manifest.webmanifest", None)
+        .await
+        .json()
+        .await
+        .unwrap();
+
+    let attribute = |name: &'static str| page.split(name).skip(1);
+    let mut paths: Vec<String> = attribute("href=\"")
+        .chain(attribute("src=\""))
+        .filter_map(|rest| rest.split('"').next())
+        .filter(|path| path.contains("icon") || path.contains("logo"))
+        .map(str::to_owned)
+        .collect();
+    assert!(paths.contains(&"/favicon.ico".to_owned()), "{paths:?}");
+    assert!(page.contains("rel=\"manifest\""));
+    paths.extend(
+        manifest["icons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|icon| icon["src"].as_str().unwrap().to_owned()),
+    );
+
+    for path in paths {
+        let response = app.get(&path, None).await;
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        let content_type = response.headers()[CONTENT_TYPE].to_str().unwrap();
+        assert!(content_type.starts_with("image/"), "{path}: {content_type}");
+    }
+}
+
+#[tokio::test]
 async fn invite_creates_a_member_without_admin_rights() {
     let app = app().await;
     let admin = app.login("admin", ADMIN_PASSWORD).await;
