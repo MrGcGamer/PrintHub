@@ -1,6 +1,6 @@
 <div class="card-head">
   <h2>{{ card.state }}</h2>
-  <span><span class="badge {% if card.connected %}ok{% else %}warn{% endif %}">{{ card.link }}</span><a class="help" href="/wiki/printer#connection" aria-label="Help: printer connection">?</a></span>
+  <span><span class="badge {% if card.connected %}ok{% else %}warn{% endif %}">{{ card.link }}</span>{% if let Some(last_seen) = card.last_seen %}<span class="muted">last seen {{ last_seen }}</span>{% endif %}<a class="help" href="/wiki/printer#connection" aria-label="Help: printer connection">?</a></span>
 </div>
 {% if let Some(progress) = card.progress %}
 <progress max="100" value="{{ progress }}">{{ progress }}%</progress>

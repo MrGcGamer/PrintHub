@@ -1203,6 +1203,7 @@ mod tests {
 
     fn snapshot(machine_status: i64, trays: &[(u32, i64)]) -> PrinterSnapshot {
         PrinterSnapshot {
+            last_seen: None,
             link: LinkState::Registered,
             status: Some(StatusView {
                 machine_status: MachineStatus {

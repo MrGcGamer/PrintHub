@@ -13,6 +13,8 @@ use crate::{
 pub struct PrinterCard {
     pub connected: bool,
     pub link: String,
+    /// When the printer was last connected, while it is not connected now.
+    pub last_seen: Option<String>,
     pub state: String,
     pub busy: bool,
     pub paused: bool,
@@ -76,12 +78,17 @@ impl PrinterCard {
             LinkState::Rejected(reason) => format!("Refused: {reason}"),
             LinkState::Disconnected(_) => "Disconnected".to_owned(),
         };
+        let last_seen = (!connected)
+            .then_some(snapshot.last_seen)
+            .flatten()
+            .map(format_time);
         let trays = trays(snapshot, bindings);
 
         let Some(status) = &snapshot.status else {
             return Self {
                 connected,
                 link,
+                last_seen,
                 state: "Waiting for the printer".to_owned(),
                 busy: false,
                 paused: false,
@@ -107,6 +114,7 @@ impl PrinterCard {
         Self {
             connected,
             link,
+            last_seen,
             state: state_label(status),
             busy,
             paused: busy && matches!(machine.sub_status, sub::PAUSED | sub::PAUSED_ALT),

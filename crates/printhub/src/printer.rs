@@ -35,6 +35,7 @@ impl PrinterLink {
             status: None,
             canvas: None,
             attributes: None,
+            last_seen: None,
         });
         let client = Arc::new(OnceLock::new());
         let settings = Settings {

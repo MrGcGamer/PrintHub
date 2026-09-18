@@ -246,6 +246,10 @@ async fn silent_printer_forces_reconnect() {
 
     printer.set_answer_pings(false);
     wait_for(&client, "link loss", |s| s.link != LinkState::Registered).await;
+    assert!(
+        client.snapshot().last_seen.is_some(),
+        "losing the link stamps last seen"
+    );
 
     printer.set_answer_pings(true);
     client

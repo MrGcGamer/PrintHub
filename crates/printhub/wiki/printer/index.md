@@ -19,6 +19,9 @@ The badge at the top of the card says whether PrintHub can talk to the printer.
 | Refused: … | The printer answered but turned PrintHub away, and gives the reason. `too many clients` means other programs, such as a slicer, hold its connections. |
 | Disconnected | The connection dropped. PrintHub reconnects on its own. |
 
+Whenever the badge is not Connected, the time the printer was last connected stands beside it,
+unless PrintHub has not reached the printer since it started.
+
 While the printer is not connected, no job starts, and the temperatures and trays on the card
 are the last ones it reported.
 

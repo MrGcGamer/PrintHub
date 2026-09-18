@@ -96,6 +96,9 @@ pub struct PrinterSnapshot {
     pub status: Option<StatusView>,
     pub canvas: Option<CanvasInfo>,
     pub attributes: Option<Attributes>,
+    /// Unix seconds at which the link last left [`LinkState::Registered`]; `None` until it has
+    /// been registered once in this process.
+    pub last_seen: Option<i64>,
 }
 
 #[derive(Debug, Error)]
@@ -150,6 +153,7 @@ impl PrinterClient {
             status: None,
             canvas: None,
             attributes: None,
+            last_seen: None,
         });
         let inner = Arc::new(Inner {
             topics: Topics::new(&config.serial, &client_id, &request_id),
@@ -642,6 +646,9 @@ impl Inner {
             if s.link == link {
                 return false;
             }
+            if s.link == LinkState::Registered {
+                s.last_seen = Some(unix_seconds());
+            }
             s.link = link;
             true
         });
@@ -655,6 +662,10 @@ impl Inner {
         self.register_waiter.lock().unwrap().take();
         self.set_link(LinkState::Disconnected(reason));
     }
+}
+
+fn unix_seconds() -> i64 {
+    (unix_millis() / 1000) as i64
 }
 
 fn unix_millis() -> u128 {
