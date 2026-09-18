@@ -12,13 +12,16 @@ RUN apt-get update \
 RUN curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-$(uname -m)-linux-${ZIG_VERSION}.tar.xz" \
     | tar -xJ -C /usr/local \
  && ln -s "/usr/local/zig-$(uname -m)-linux-${ZIG_VERSION}/zig" /usr/local/bin/zig
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
+# The two platform variants build at once and share this registry cache, so it is locked:
+# with the default `sharing=shared` both cargos unpack crates into it and collide on
+# `.cargo-ok` ("File exists"). The target dir needs no lock, being keyed per architecture.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo install --locked "cargo-zigbuild@${CARGO_ZIGBUILD_VERSION}" \
  && rustup target add aarch64-unknown-linux-musl x86_64-unknown-linux-musl
 WORKDIR /src
 COPY . .
 ARG TARGETARCH
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/src/target,id=printhub-target-${TARGETARCH} \
     case "$TARGETARCH" in \
       arm64) target=aarch64-unknown-linux-musl ;; \
