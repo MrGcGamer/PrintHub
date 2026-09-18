@@ -102,17 +102,8 @@ sqlx migrate run --source crates/printhub/migrations
 - `.claude/skills/verify-phase` holds the full check chain and a smoke test of `serve` against
   the fake printer.
 - The icons in `crates/printhub/static` are rendered from `logo.svg` and `logo-maskable.svg`
-  (full-bleed, for launchers that crop their own shape). After editing either, with Inkscape
-  and ImageMagick, from that directory:
-
-  ```sh
-  inkscape logo.svg -o icon-192.png -w 192 -h 192
-  inkscape logo.svg -o icon-512.png -w 512 -h 512
-  inkscape logo-maskable.svg -o icon-maskable-512.png -w 512 -h 512
-  inkscape logo-maskable.svg -o apple-touch-icon.png -w 180 -h 180
-  for s in 16 32 48; do inkscape logo.svg -o /tmp/favicon-$s.png -w $s -h $s; done
-  magick /tmp/favicon-16.png /tmp/favicon-32.png /tmp/favicon-48.png favicon.ico
-  ```
+  (full-bleed, for launchers that crop their own shape). After editing either, run
+  `crates/printhub/static/render-icons.sh` (needs Inkscape and ImageMagick).
 
 ## Build for another architecture
 
