@@ -50,14 +50,16 @@ impl User {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Permission {
     SetNozzle,
+    ControlPrint,
 }
 
 impl Permission {
-    pub const ALL: [Self; 1] = [Self::SetNozzle];
+    pub const ALL: [Self; 2] = [Self::SetNozzle, Self::ControlPrint];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SetNozzle => "set_nozzle",
+            Self::ControlPrint => "control_print",
         }
     }
 
@@ -70,6 +72,7 @@ impl Permission {
     pub fn label(self) -> &'static str {
         match self {
             Self::SetNozzle => "Record the mounted nozzle",
+            Self::ControlPrint => "Pause or stop any print",
         }
     }
 }

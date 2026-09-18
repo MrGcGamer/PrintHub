@@ -47,6 +47,7 @@ pub async fn dashboard(
     let card = PrinterCard::new(
         &snapshot,
         &current.user,
+        accounts::has_permission(&state.db, &current.user, Permission::ControlPrint).await?,
         &bindings,
         &mounted,
         super::layer_total(&state, &snapshot).await,

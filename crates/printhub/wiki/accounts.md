@@ -10,8 +10,8 @@ There are two roles. Admins can do everything members can.
 
 | | Member | Admin |
 |---|---|---|
-| Upload jobs; confirm, cancel, stop or retry them | own jobs | any job |
-| Pause or resume a print | own job's print, from its page | any print, also from the dashboard |
+| Upload jobs; confirm, cancel or retry them | own jobs | any job |
+| Pause, resume or stop a running print | own print, or if granted | any print |
 | Move jobs in the queue | – | yes |
 | Confirm the bed is clear | yes | yes |
 | Add spools | as their own | for anyone, or shared |
@@ -25,8 +25,11 @@ There are two roles. Admins can do everything members can.
 ## Permissions
 
 A permission lets a member do one admin-only thing. Admins tick them per member on the Users
-page; admins hold all of them. There is one so far: *Record the mounted nozzle*, see
-[Mounted nozzle](/wiki/printer/nozzle).
+page; admins hold all of them.
+
+- *Record the mounted nozzle*, see [Mounted nozzle](/wiki/printer/nozzle).
+- *Pause or stop any print*, for whoever is at the printer when something goes wrong. It
+  covers pausing, resuming and stopping. A print of one's own never needs it.
 
 ## Joining
 

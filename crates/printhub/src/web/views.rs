@@ -57,6 +57,7 @@ impl PrinterCard {
     pub fn new(
         snapshot: &PrinterSnapshot,
         user: &User,
+        may_control: bool,
         bindings: &[Binding],
         mounted: &MountedNozzle,
         total_layers: Option<i64>,
@@ -128,7 +129,7 @@ impl PrinterCard {
             nozzle_note,
             bed: Some(temperature(&status.heater_bed)),
             trays,
-            can_control: connected && user.is_admin(),
+            can_control: connected && (user.is_admin() || may_control),
             light: connected.then_some(status.led.status > 0),
         }
     }

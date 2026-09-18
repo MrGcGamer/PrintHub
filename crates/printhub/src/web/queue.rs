@@ -21,7 +21,7 @@ use super::{
     views,
 };
 use crate::{
-    accounts::User,
+    accounts::{self, Permission, User},
     auth,
     cc2::model::Tray,
     dispatcher::{self, Readiness},
@@ -40,6 +40,12 @@ const DEFAULT_SCALE: &str = "100";
 
 fn can_manage(user: &User, job: &Job) -> bool {
     user.is_admin() || job.owner_id() == Some(user.id)
+}
+
+/// Controlling a running print is the one thing `ControlPrint` opens to somebody who neither
+/// owns the job nor is an admin. Everything else a job offers stays with `can_manage`.
+async fn may_control_any_print(state: &AppState, user: &User) -> Result<bool, AppError> {
+    Ok(accounts::has_permission(&state.db, user, Permission::ControlPrint).await?)
 }
 
 fn owner_name(job: &Job) -> String {
@@ -90,6 +96,7 @@ pub async fn jobs_page(
     Query(outcome): Query<Outcome>,
 ) -> Result<Response, AppError> {
     let readiness = Readiness::load(&state).await?;
+    let may_control = may_control_any_print(&state, &current.user).await?;
     let mut rows = Vec::new();
     for job in jobs::list(&state.db, RECENT_FINISHED).await? {
         let detail = match job.state {
@@ -108,13 +115,16 @@ pub async fn jobs_page(
             _ => String::new(),
         };
         let manage = can_manage(&current.user, &job);
+        let printing = job.state == JobState::Printing;
         rows.push(JobRow {
             id: job.id,
             owner: owner_name(&job),
             state: job.state.label(),
             estimate: estimate(&job),
-            printing: job.state == JobState::Printing,
-            can_cancel: manage && !job.state.is_finished() && job.state != JobState::Uploading,
+            printing,
+            can_cancel: (manage || (printing && may_control))
+                && !job.state.is_finished()
+                && job.state != JobState::Uploading,
             can_move: current.user.is_admin() && job.state == JobState::Queued,
             can_requeue: manage && job.state == JobState::Failed && job.estimated_seconds.is_some(),
             detail,
@@ -566,7 +576,6 @@ struct JobPage {
     user: Option<User>,
     job: JobView,
     tools: Vec<ToolRow>,
-    can_manage: bool,
     confirm: bool,
     blocked: Option<String>,
     notice: Option<&'static str>,
@@ -629,6 +638,8 @@ async fn job_detail(
     let job = jobs::get(&state.db, id).await?.ok_or(AppError::NotFound)?;
     let tools = jobs::tools(&state.db, id).await?;
     let manage = can_manage(&user, &job);
+    let printing = job.state == JobState::Printing;
+    let may_cancel = manage || (printing && may_control_any_print(state, &user).await?);
     let confirm = manage && job.state == JobState::AwaitingConfirm;
     let blocked = if job.state == JobState::Queued {
         let readiness = Readiness::load(state).await?;
@@ -723,8 +734,8 @@ async fn job_detail(
             estimate: estimate(&job),
             progress: job.progress,
             slicing: job.state == JobState::Slicing,
-            printing: job.state == JobState::Printing,
-            can_cancel: manage && !job.state.is_finished() && job.state != JobState::Uploading,
+            printing,
+            can_cancel: may_cancel && !job.state.is_finished() && job.state != JobState::Uploading,
             can_requeue: manage && job.state == JobState::Failed && !tools.is_empty(),
             created: views::format_time(job.created_at),
             model_file: exists(&jobs::model_path(&state.config.data_dir, id))
@@ -737,7 +748,6 @@ async fn job_detail(
             name: job.name,
         },
         tools: tool_rows,
-        can_manage: manage,
         confirm,
         blocked,
         notice,
@@ -886,7 +896,13 @@ pub async fn cancel_job(
     current: CurrentUser,
     UrlPath(id): UrlPath<i64>,
 ) -> Result<Response, AppError> {
-    let job = managed_job(&state, &current.user, id).await?;
+    let job = jobs::get(&state.db, id).await?.ok_or(AppError::NotFound)?;
+    let printing = job.state == JobState::Printing;
+    let permitted = can_manage(&current.user, &job)
+        || (printing && may_control_any_print(&state, &current.user).await?);
+    if !permitted {
+        return Err(AppError::Forbidden);
+    }
     match job.state {
         JobState::Printing => {
             let client = state

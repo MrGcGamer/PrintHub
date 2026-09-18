@@ -1530,3 +1530,111 @@ async fn a_slicing_job_polls_until_it_can_be_confirmed() {
         "and stops once it is confirmable: {confirm}"
     );
 }
+
+#[tokio::test]
+async fn controlling_another_member_s_print_needs_the_permission() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let sam = app.member("sam").await;
+    let kim = app.member("kim").await;
+    let user_id = |name: &'static str| {
+        let db = app.db.clone();
+        async move {
+            accounts::login_record(&db, name)
+                .await
+                .unwrap()
+                .unwrap()
+                .0
+                .id
+        }
+    };
+    let (sam_id, admin_id, kim_id) = (
+        user_id("sam").await,
+        user_id("admin").await,
+        user_id("kim").await,
+    );
+
+    let now = store::now();
+    let id = jobs::create(
+        &app.db,
+        &jobs::NewJob {
+            owner_id: sam_id,
+            name: "benchy.gcode",
+            source: jobs::Source::Gcode,
+            process_profile: None,
+            filament_profile: None,
+            supports: None,
+            infill_percent: None,
+            scale_percent: None,
+        },
+        now,
+    )
+    .await
+    .unwrap();
+    for (from, to) in [
+        (JobState::AwaitingConfirm, JobState::Queued),
+        (JobState::Queued, JobState::Uploading),
+        (JobState::Uploading, JobState::Printing),
+    ] {
+        jobs::transition(&app.db, id, from, to, None, now)
+            .await
+            .unwrap();
+    }
+    let job_path = format!("/jobs/{id}");
+    let cancel = format!("{job_path}/cancel");
+
+    let owner_page = app.get(&job_path, Some(&sam)).await.text().await.unwrap();
+    assert!(
+        owner_page.contains("Stop the print"),
+        "one can always stop their own print: {owner_page}"
+    );
+    let stranger = app.get(&job_path, Some(&kim)).await.text().await.unwrap();
+    assert!(!stranger.contains("Stop the print"), "{stranger}");
+    assert!(!stranger.contains("/printer/pause"), "{stranger}");
+    assert_eq!(
+        app.post(&cancel, Some(&kim), &[]).await.status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        app.post("/printer/stop", Some(&kim), &[]).await.status(),
+        StatusCode::FORBIDDEN
+    );
+
+    accounts::set_permissions(
+        &app.db,
+        kim_id,
+        &[accounts::Permission::ControlPrint],
+        admin_id,
+        store::now(),
+    )
+    .await
+    .unwrap();
+
+    let granted = app.get(&job_path, Some(&kim)).await.text().await.unwrap();
+    assert!(granted.contains("Stop the print"), "{granted}");
+    assert!(
+        granted.contains("/printer/pause"),
+        "pausing goes with stopping: {granted}"
+    );
+    assert_ne!(
+        app.post(&cancel, Some(&kim), &[]).await.status(),
+        StatusCode::FORBIDDEN,
+        "the queue's own stop button honours the permission too"
+    );
+    assert_eq!(
+        app.post("/printer/stop", Some(&kim), &[]).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        app.post("/printer/pause", Some(&kim), &[]).await.status(),
+        StatusCode::OK
+    );
+
+    let users = app
+        .get("/admin/users", Some(&admin))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(users.contains("Pause or stop any print"), "{users}");
+}

@@ -20,6 +20,7 @@ use super::{
     views::PrinterCard,
 };
 use crate::{
+    accounts::{self, Permission},
     camera,
     jobs::{self, JobState},
 };
@@ -46,6 +47,10 @@ pub async fn printer_events(
     current: CurrentUser,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let user = current.user;
+    // A failed lookup only hides the buttons; `control` checks the permission again.
+    let may_control = accounts::has_permission(&state.db, &user, Permission::ControlPrint)
+        .await
+        .unwrap_or(false);
     let printer = state.printer.subscribe();
     let bindings = state.bindings.subscribe();
     let nozzle = state.nozzle.subscribe();
@@ -64,7 +69,14 @@ pub async fn printer_events(
                 let mounted = nozzle.borrow().clone();
                 let total_layers = super::layer_total(&state, &snapshot).await;
                 let partial = PrinterCardPartial {
-                    card: PrinterCard::new(&snapshot, &user, &bindings, &mounted, total_layers),
+                    card: PrinterCard::new(
+                        &snapshot,
+                        &user,
+                        may_control,
+                        &bindings,
+                        &mounted,
+                        total_layers,
+                    ),
                 };
                 let html = partial.render().unwrap_or_else(|err| {
                     tracing::error!(%err, "rendering printer card");
@@ -76,7 +88,8 @@ pub async fn printer_events(
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
-/// Admins control any print; members only a print of their own job.
+/// Admins and `ControlPrint` holders control any print; everybody else only a print of their
+/// own job.
 pub async fn control(
     State(state): State<AppState>,
     current: CurrentUser,
@@ -84,15 +97,14 @@ pub async fn control(
 ) -> Result<Response, AppError> {
     // The light changes nothing about a print, and the camera view is useless in the dark, so
     // it is the one control everybody holds.
-    let light = matches!(action.as_str(), "light-on" | "light-off");
-    if !light && !current.user.is_admin() {
-        let printing = jobs::in_state(&state.db, JobState::Printing).await?;
-        if !printing
+    let allowed = matches!(action.as_str(), "light-on" | "light-off")
+        || accounts::has_permission(&state.db, &current.user, Permission::ControlPrint).await?
+        || jobs::in_state(&state.db, JobState::Printing)
+            .await?
             .iter()
-            .any(|job| job.owner_id() == Some(current.user.id))
-        {
-            return Err(AppError::Forbidden);
-        }
+            .any(|job| job.owner_id() == Some(current.user.id));
+    if !allowed {
+        return Err(AppError::Forbidden);
     }
     let Some(client) = state.printer.client() else {
         return notice("error", "The printer is not connected.");

@@ -61,9 +61,9 @@
   {% endif %}
 </section>
 {% endif %}
-{% if can_manage && (job.can_cancel || job.can_requeue) %}
+{% if job.can_cancel || job.can_requeue %}
 <div class="controls">
-  {% if job.printing %}
+  {% if job.printing && job.can_cancel %}
   <button class="secondary" hx-post="/printer/pause" hx-target="#control-result">Pause</button>
   <button class="secondary" hx-post="/printer/resume" hx-target="#control-result">Resume</button>
   {% endif %}

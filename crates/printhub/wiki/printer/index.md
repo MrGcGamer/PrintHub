@@ -37,8 +37,9 @@ explained under [Mounted nozzle](/wiki/printer/nozzle).
 
 ## Pause, resume and stop
 
-Admins get these buttons on the card while the printer prints. Members pause, resume or stop a
-print of their own job on the job's page.
+Admins get these buttons on the card while the printer prints, as does a member granted
+[*Pause or stop any print*](/wiki/accounts#permissions). Everybody else pauses, resumes or stops
+a print of their own job, on the job's page.
 
 Pause and resume only send the command; the card's heading shows when the printer has done it.
 A stopped print cannot be resumed. Its job ends as Cancelled, and the filament it used up to
