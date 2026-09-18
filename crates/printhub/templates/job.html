@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}{{ job.name }} · PrintHub{% endblock %}
-{% block head %}{% if job.slicing || job.printing %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
 {% block content %}
 <section class="panel">
   <div class="card-head">
@@ -74,4 +73,7 @@
 {% endif %}
 <div id="control-result" role="status"></div>
 <p><a href="/jobs">Back to the queue</a></p>
+{% if job.slicing || job.printing %}
+<div hx-get="/jobs/{{ job.id }}" hx-trigger="every 3s" hx-select="main" hx-target="main" hx-swap="outerHTML"></div>
+{% endif %}
 {% endblock %}

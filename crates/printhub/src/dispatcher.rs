@@ -69,6 +69,14 @@ impl Readiness {
         })
     }
 
+    /// The bed cannot be cleared while the printer is working, whoever started the print.
+    pub fn printer_busy(&self) -> bool {
+        self.snapshot
+            .status
+            .as_ref()
+            .is_some_and(|status| status.machine_status.state() != MachineState::Idle)
+    }
+
     pub fn check(
         &self,
         state: &AppState,

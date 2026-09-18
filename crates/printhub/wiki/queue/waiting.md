@@ -34,7 +34,8 @@ fitted.
 
 PrintHub cannot see whether the last print is still on the bed, so every print that starts marks
 the bed as not clear, and someone has to confirm it on the queue page after taking the print
-off. The camera still there shows the bed as it is now.
+off. The camera still there shows the bed as it is now. The button appears once the printer has
+stopped, since nothing can come off the bed while it prints.
 
 > Confirm only once the bed is really empty. The next job starts within seconds, and a print
 > left on the bed ends up under the nozzle.

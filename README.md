@@ -33,6 +33,7 @@ docker compose up -d
   needs no printer, and is the quickest way to see whether a slice fits in a small machine's RAM.
 - `probe` checks every printer endpoint PrintHub uses and prints a report. It changes nothing on
   the printer.
+- `HTTP_PORT` publishes the web UI on another host port, e.g. `HTTP_PORT=80 docker compose up -d`.
 - On first start with no admin, `ADMIN_USERNAME` and `ADMIN_PASSWORD` create one. Remove them
   from `compose.yaml` afterwards; everyone else joins through invite links.
 - The printer does not report its nozzle, so it is recorded on the dashboard. Admins always
@@ -61,7 +62,7 @@ its own screen — it allows few simultaneous clients.
 | `PRINTER_MQTT_PORT` | `1883` | |
 | `PRINTER_UPLOAD_PORT` | `80` | |
 | `PRINTER_CAMERA_PORT` | `8080` | |
-| `LISTEN_ADDR` | `0.0.0.0:8080` | |
+| `LISTEN_ADDR` | `0.0.0.0:8080` | The address PrintHub itself serves on |
 | `DATA_DIR` | `/data` | Database, uploads and sliced files |
 | `TZ` | `UTC` | IANA zone the print schedule is written in |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | unset | Creates the first admin; ignored once one exists |

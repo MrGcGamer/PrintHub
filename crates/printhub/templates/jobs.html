@@ -9,6 +9,8 @@
   {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
   {% if bed_clear %}
   <p class="muted">The bed is marked clear.</p>
+  {% else if printer_busy %}
+  <p class="muted">The printer is working. Confirm the bed is clear once it stops.</p>
   {% else %}
   <div class="bed-check">
     <p><strong>Nobody has confirmed that the bed is clear.</strong> No job starts until someone does. <a class="help" href="/wiki/queue/waiting#nobody-has-confirmed-that-the-bed-is-clear" aria-label="Help: confirming the bed is clear">?</a></p>

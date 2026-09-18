@@ -901,6 +901,11 @@ async fn gcode_job_prints_from_its_spool_and_deducts_filament() {
         !jobs::bed_clear(&app.db).await.unwrap(),
         "a started print leaves the bed not clear"
     );
+    let printing = app.get("/jobs", Some(&admin)).await.text().await.unwrap();
+    assert!(
+        !printing.contains("The bed is clear</button>"),
+        "the bed cannot be cleared under a running print: {printing}"
+    );
 
     app.printer.complete_print();
     app.wait_for_job(job_id, |job| job.state == JobState::Done)
@@ -1473,4 +1478,55 @@ async fn statistics_show_whose_filament_was_used_and_what_is_owed() {
     app.post(&delete, Some(&admin), &[]).await;
     let reopened = app.get("/stats", Some(&sam)).await.text().await.unwrap();
     assert!(reopened.contains("alex owes sam"));
+}
+
+#[tokio::test]
+async fn a_slicing_job_polls_until_it_can_be_confirmed() {
+    let app = app().await;
+    let sam = app.member("sam").await;
+    let sam_id = accounts::login_record(&app.db, "sam")
+        .await
+        .unwrap()
+        .unwrap()
+        .0
+        .id;
+    let id = jobs::create(
+        &app.db,
+        &jobs::NewJob {
+            owner_id: sam_id,
+            name: "cube.stl",
+            source: jobs::Source::Stl,
+            process_profile: Some(PROCESS),
+            filament_profile: Some("Elegoo PLA @ECC2"),
+            supports: Some(false),
+            infill_percent: Some(20),
+            scale_percent: None,
+        },
+        store::now(),
+    )
+    .await
+    .unwrap();
+
+    let path = format!("/jobs/{id}");
+    let slicing = app.get(&path, Some(&sam)).await.text().await.unwrap();
+    assert!(
+        slicing.contains(&format!(r#"hx-get="/jobs/{id}""#)),
+        "a slicing job reloads itself: {slicing}"
+    );
+
+    jobs::transition(
+        &app.db,
+        id,
+        JobState::Slicing,
+        JobState::AwaitingConfirm,
+        None,
+        store::now(),
+    )
+    .await
+    .unwrap();
+    let confirm = app.get(&path, Some(&sam)).await.text().await.unwrap();
+    assert!(
+        !confirm.contains("hx-trigger"),
+        "and stops once it is confirmable: {confirm}"
+    );
 }

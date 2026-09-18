@@ -66,6 +66,7 @@ struct JobsPage {
     user: Option<User>,
     rows: Vec<JobRow>,
     bed_clear: bool,
+    printer_busy: bool,
     camera_enabled: bool,
     notice: Option<&'static str>,
 }
@@ -124,6 +125,7 @@ pub async fn jobs_page(
         user: Some(current.user),
         rows,
         bed_clear: readiness.bed_clear,
+        printer_busy: readiness.printer_busy(),
         camera_enabled: state.camera.is_some(),
         notice: outcome.done.as_deref().and_then(|code| match code {
             "queued" => Some("Job added to the queue."),
