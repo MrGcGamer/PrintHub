@@ -1,12 +1,22 @@
 # PrintHub
 
-A shared print queue for one Elegoo Centauri Carbon 2: accounts for a group of friends, a live
-printer dashboard and camera, a filament inventory bound to the printer's trays, and a queue
-that slices STL uploads with OrcaSlicer and starts jobs when the bed is clear and the schedule
-allows. Statistics show who prints how much, with whose filament, and what that leaves people
-owing each other.
+A shared print queue for one Elegoo Centauri Carbon 2, for a group of friends who print on it.
+It answers the questions a shared printer creates: whose turn is it, whose filament went into
+that, and who owes whom.
 
 One Docker image, configured by environment variables, serving plain HTTP on port 8080.
+
+- **Queue.** Upload an STL and PrintHub slices it with the bundled OrcaSlicer and Elegoo's
+  profiles, or upload G-code you sliced yourself. A job starts only when the printer is idle,
+  the bed is confirmed clear, the mounted nozzle matches and the schedule allows.
+- **Dashboard.** Live printer state, temperatures, trays and the camera, over SSE. Pause,
+  resume and stop; the chamber light is available to everyone.
+- **Filament.** Spools bound to the printer's CANVAS trays. Prints deduct grams from the spool
+  they used, and weigh-ins correct the drift.
+- **Statistics.** Who printed how much, with whose filament, and what that leaves people owing
+  each other. Balances are over all time, net of recorded payments.
+- **Accounts.** Invite links, per-permission grants, and admins who hold everything.
+- **Help.** A searchable wiki built into the app, linked from wherever a setting needs it.
 
 ## Run
 
@@ -20,7 +30,7 @@ docker compose up -d
 ```
 
 - `slice-selftest` slices a 20 mm cube with the bundled profiles and prints the grams used. It
-  needs no printer.
+  needs no printer, and is the quickest way to see whether a slice fits in a small machine's RAM.
 - `probe` checks every printer endpoint PrintHub uses and prints a report. It changes nothing on
   the printer.
 - On first start with no admin, `ADMIN_USERNAME` and `ADMIN_PASSWORD` create one. Remove them
@@ -36,6 +46,9 @@ docker compose up -d
 Behind a reverse proxy that terminates HTTPS, such as `tailscale serve`, set `TRUST_PROXY=true`
 so the session cookie is marked `Secure`, and origin checks and invite links use
 `X-Forwarded-Proto` and `X-Forwarded-Host`.
+
+The printer must be in LAN Only Mode, and PrintHub is the only thing that talks to it besides
+its own screen — it allows few simultaneous clients.
 
 ## Configuration
 
@@ -61,18 +74,17 @@ so the session cookie is marked `Secure`, and origin checks and invite links use
 | `ORCA_PROFILES` | `/opt/orcaslicer/resources/profiles/Elegoo` | |
 | `RUST_LOG` | `info` for `serve`, else `warn` | Log filter, e.g. `debug` or `printhub=debug` |
 
-## Build for another architecture
+## Limits
 
-The image builds for `linux/arm64` and `linux/amd64`. Rust is cross-compiled on the build host,
-so only the final `apt-get` step runs emulated.
-
-```sh
-docker buildx build --platform linux/arm64,linux/amd64 -t <registry>/printhub:latest --push .
-```
+- One printer, and the multi-material CANVAS it came with.
+- A model can be scaled down on upload but not up: OrcaSlicer's CLI segfaults on any factor
+  above 1 ([#13328](https://github.com/OrcaSlicer/OrcaSlicer/issues/13328), fixed upstream but
+  not yet in a release). Enlarge in your own slicer and upload the G-code.
+- Nothing checks that a model fits the bed before slicing it.
 
 ## Development
 
-Needs Rust 1.96 and `sqlx-cli`:
+Rust 1.96 and `sqlx-cli`. `sqlx::query!` checks queries against `DATABASE_URL` at compile time:
 
 ```sh
 cargo install sqlx-cli --no-default-features --features sqlite
@@ -82,9 +94,8 @@ sqlx database create
 sqlx migrate run --source crates/printhub/migrations
 ```
 
-- `sqlx::query!` checks queries against `DATABASE_URL` at compile time. After changing a query,
-  run `cargo sqlx prepare --workspace -- --all-targets` and commit `.sqlx/`; the Docker build
-  compiles from that offline data.
+- After changing a query, run `cargo sqlx prepare --workspace -- --all-targets` and commit
+  `.sqlx/`; the Docker build compiles from that offline data and fails when it is stale.
 - `cargo run -p fakeprinter` starts an emulated printer (MQTT, upload, camera) and prints the
   `PRINTER_*` variables that point PrintHub at it. Then `cargo run -p printhub -- serve`.
 - The test that runs the real slicer is skipped unless `ORCA_SLICER` and `ORCA_PROFILES` are set.
@@ -102,3 +113,12 @@ sqlx migrate run --source crates/printhub/migrations
   for s in 16 32 48; do inkscape logo.svg -o /tmp/favicon-$s.png -w $s -h $s; done
   magick /tmp/favicon-16.png /tmp/favicon-32.png /tmp/favicon-48.png favicon.ico
   ```
+
+## Build for another architecture
+
+The image builds for `linux/arm64` and `linux/amd64`. Rust is cross-compiled on the build host,
+so only the final `apt-get` step runs emulated.
+
+```sh
+docker buildx build --platform linux/arm64,linux/amd64 -t <registry>/printhub:latest --push .
+```
