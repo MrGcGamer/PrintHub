@@ -891,7 +891,7 @@ async fn gcode_job_prints_from_its_spool_and_deducts_filament() {
     })
     .await;
     let started = app.printer.started_prints();
-    assert_eq!(started[0]["filename"], format!("printhub-{job_id}.gcode"));
+    assert_eq!(started[0]["filename"], format!("cube-{job_id}.gcode"));
     assert_eq!(
         started[0]["config"]["slot_map"],
         serde_json::json!([{"t": 0, "canvas_id": 0, "tray_id": 0}])

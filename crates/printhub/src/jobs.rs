@@ -141,9 +141,23 @@ impl Job {
         self.owner.as_ref().map(|(id, _)| *id)
     }
 
-    /// Plain ASCII: the upload sends it in an HTTP header.
+    /// Plain ASCII: the upload sends it in an HTTP header. The id suffix keeps it unique, and
+    /// the dispatcher recognises its own print by comparing the printer's reported name against
+    /// this exact string.
     pub fn printer_filename(&self) -> String {
-        format!("printhub-{}.gcode", self.id)
+        let stem = self
+            .name
+            .rsplit_once('.')
+            .map_or(self.name.as_str(), |(stem, _)| stem);
+        let slug: String = stem
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .take(40)
+            .collect();
+        match slug.trim_matches('-') {
+            "" => format!("printhub-{}.gcode", self.id),
+            slug => format!("{slug}-{}.gcode", self.id),
+        }
     }
 }
 
@@ -942,6 +956,43 @@ mod tests {
         .await
         .unwrap();
         id
+    }
+
+    #[test]
+    fn printer_filename_slugifies_the_upload_name() {
+        let job = |name: &str| Job {
+            id: 3,
+            owner: None,
+            name: name.into(),
+            source: Source::Gcode,
+            state: JobState::Queued,
+            position: 0,
+            process_profile: None,
+            filament_profile: None,
+            supports: None,
+            infill_percent: None,
+            scale_percent: None,
+            estimated_seconds: None,
+            layers: None,
+            printer_task_uuid: None,
+            progress: 0,
+            error: String::new(),
+            created_at: 0,
+            started_at: None,
+            finished_at: None,
+            nozzle_mm: None,
+            plate: None,
+        };
+        assert_eq!(job("cube.gcode").printer_filename(), "cube-3.gcode");
+        assert_eq!(
+            job("M\u{e4}nnchen v2.stl").printer_filename(),
+            "M-nnchen-v2-3.gcode"
+        );
+        assert_eq!(job("\u{2603}.stl").printer_filename(), "printhub-3.gcode");
+        assert_eq!(
+            job(&format!("{}.stl", "x".repeat(60))).printer_filename(),
+            format!("{}-3.gcode", "x".repeat(40))
+        );
     }
 
     #[test]
