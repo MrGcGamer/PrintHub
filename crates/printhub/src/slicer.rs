@@ -175,6 +175,8 @@ pub struct SliceSettings {
     pub infill_percent: u8,
     /// Uniform scale in percent. 100 passes the model through untouched.
     pub scale_percent: f64,
+    /// Turns every object onto the side OrcaSlicer judges best, overriding how it was saved.
+    pub auto_orient: bool,
 }
 
 pub struct Slicer {
@@ -257,6 +259,10 @@ impl Slicer {
         }
 
         let mut command = Command::new(&self.binary);
+        // Only 1 orients a plain model: the CLI's "auto" value orients nothing but 3MF objects.
+        if settings.auto_orient {
+            command.args(["--orient", "1"]);
+        }
         // `--scale` alone scales about the object's centre and leaves it hanging off the bed;
         // `--ensure-on-bed` seats it again afterwards, and both are needed for a right answer.
         if (settings.scale_percent - 100.0).abs() > f64::EPSILON {
@@ -510,6 +516,7 @@ mod tests {
             supports: true,
             infill_percent: 25,
             scale_percent: 100.0,
+            auto_orient: false,
         }
     }
 
@@ -548,6 +555,15 @@ mod tests {
         let settings_arg = args[args.iter().position(|a| *a == "--load-settings").unwrap() + 1];
         assert_eq!(settings_arg.split(';').count(), 2);
         assert_eq!(*args.last().unwrap(), model.to_str().unwrap());
+        assert!(!args.contains(&"--orient"), "{args:?}");
+
+        let oriented = SliceSettings {
+            auto_orient: true,
+            ..settings()
+        };
+        slicer.slice(&model, &work, &oriented).await.unwrap();
+        let args = std::fs::read_to_string(binary.with_file_name("args")).unwrap();
+        assert!(args.starts_with("--orient\n1\n"), "{args}");
 
         let read = |name: &str| -> serde_json::Value {
             serde_json::from_slice(&std::fs::read(work.join("profiles").join(name)).unwrap())
@@ -714,5 +730,53 @@ mod tests {
         )
         .await;
         assert_eq!(info.layers, Some(50), "0.20 mm layers over 10 mm");
+
+        // The cube tipped 30° onto an edge: without supports the CLI refuses it for floating
+        // regions, and auto-orient must set it back on a face, 20 mm tall.
+        let (sin, cos) = 30f32.to_radians().sin_cos();
+        let tilted: String = cube_stl(20.0)
+            .lines()
+            .map(|line| match line.trim().strip_prefix("vertex ") {
+                Some(xyz) => {
+                    let [x, y, z] = <[f32; 3]>::try_from(
+                        xyz.split(' ')
+                            .map(|n| n.parse().unwrap())
+                            .collect::<Vec<_>>(),
+                    )
+                    .unwrap();
+                    format!(
+                        "   vertex {x} {} {}\n",
+                        y * cos - z * sin,
+                        y * sin + z * cos
+                    )
+                }
+                None => format!("{line}\n"),
+            })
+            .collect();
+        let tilted_model = work.join("tilted.stl");
+        std::fs::write(&tilted_model, tilted).unwrap();
+        let unsupported = SliceSettings {
+            supports: false,
+            ..settings()
+        };
+        assert!(matches!(
+            slicer
+                .slice(&tilted_model, &work.join("tilted"), &unsupported)
+                .await,
+            Err(SliceError::Failed { .. })
+        ));
+        let gcode = slicer
+            .slice(
+                &tilted_model,
+                &work.join("oriented"),
+                &SliceSettings {
+                    auto_orient: true,
+                    ..unsupported
+                },
+            )
+            .await
+            .unwrap();
+        let info = crate::gcode::read(&gcode).await.unwrap();
+        assert_eq!(info.layers, Some(100), "0.20 mm layers over 20 mm");
     }
 }

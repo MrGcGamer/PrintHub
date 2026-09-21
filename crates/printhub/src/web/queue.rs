@@ -161,6 +161,7 @@ struct NewJobPage {
     processes: Vec<Choice>,
     filaments: Vec<Choice>,
     supports: bool,
+    auto_orient: bool,
     infill: String,
     scale_percent: String,
     error: Option<String>,
@@ -252,6 +253,7 @@ async fn new_job_form(
         processes,
         filaments,
         supports: fields.contains_key("supports"),
+        auto_orient: fields.contains_key("auto_orient"),
         infill: if field("infill").is_empty() {
             DEFAULT_INFILL.to_owned()
         } else {
@@ -493,6 +495,7 @@ async fn create_stl_job(
         .filter(|percent| *percent <= 100)
         .ok_or_else(|| user_problem("Infill is a percentage from 0 to 100."))?;
     let supports = upload.fields.contains_key("supports");
+    let auto_orient = upload.fields.contains_key("auto_orient");
     let scale_percent = parse_scale(field("scale_percent"))?;
 
     let new = NewJob {
@@ -516,6 +519,7 @@ async fn create_stl_job(
         supports,
         infill_percent: infill,
         scale_percent,
+        auto_orient,
     };
     tokio::spawn(dispatcher::slice_job(state.clone(), id, settings, spool.id));
     Ok(id)

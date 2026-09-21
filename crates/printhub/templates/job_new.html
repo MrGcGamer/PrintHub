@@ -42,6 +42,7 @@
       <input name="scale_percent" value="{{ scale_percent }}" inputmode="decimal">
     </label>
     <label class="check"><input type="checkbox" name="supports"{% if supports %} checked{% endif %}> Supports</label><a class="help" href="/wiki/queue/upload#supports" aria-label="Help: supports" target="_blank" rel="noopener">?</a>
+    <label class="check"><input type="checkbox" name="auto_orient"{% if auto_orient %} checked{% endif %}> Auto-orient</label><a class="help" href="/wiki/queue/upload#auto-orient" aria-label="Help: auto-orient" target="_blank" rel="noopener">?</a>
   </fieldset>
   {% endif %}
   <button type="submit">Upload</button>

@@ -1,7 +1,7 @@
 ---
 title: Uploading a job
 summary: Model or G-code, and what each slicing setting does.
-keywords: upload, stl, gcode, g-code, 3mf, slice, slicer, orcaslicer, build plate, plate, bed temperature, print profile, filament profile, infill, supports, scale, resize, size, dimensions, drag and drop, layer height, file size, multicolour, multi-colour
+keywords: upload, stl, gcode, g-code, 3mf, slice, slicer, orcaslicer, build plate, plate, bed temperature, print profile, filament profile, infill, supports, orient, orientation, rotate, tilted, scale, resize, size, dimensions, drag and drop, layer height, file size, multicolour, multi-colour
 order: 1
 ---
 ## Model or G-code
@@ -83,3 +83,12 @@ so a part at 50 % uses well over an eighth of the filament.
 Adds removable scaffolding under overhangs that would otherwise print in mid-air. Leave it off
 for models designed to print without it: supports cost filament and time, and leave marks where
 they touched.
+
+### Auto-orient
+
+Turns the model onto the side OrcaSlicer judges best to print on before slicing it. Use it for a
+model saved at an odd angle: one resting on an edge or a point either needs supports or fails to
+slice, because parts of it would print in mid-air.
+
+> It overrides how the model was saved, so a tall part meant to print standing is laid on its
+> side. Leave it off for a model already facing the way it should print.

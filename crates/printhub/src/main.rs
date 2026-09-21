@@ -93,6 +93,7 @@ async fn slice_selftest(config: &Config) -> anyhow::Result<ExitCode> {
         supports: false,
         infill_percent: 15,
         scale_percent: 100.0,
+        auto_orient: false,
     };
     // An incompatible profile otherwise surfaces as a bare exit status from the CLI.
     for (kind, name, compatible) in [
