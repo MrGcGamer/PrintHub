@@ -10,6 +10,7 @@
   {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   {% if !job.error.is_empty() %}<p class="error">{{ job.error }}</p>{% endif %}
   {% if let Some(blocked) = blocked %}<p class="waiting" role="status">Waiting: {{ blocked }} <a class="help" href="/wiki/queue/waiting" aria-label="Help: why a job waits">?</a></p>{% endif %}
+  {% if job.gcode_file.is_some() %}<img class="preview" src="/jobs/{{ job.id }}/files/preview.png" alt="Preview of {{ job.name }}" width="256" height="256">{% endif %}
   {% if job.printing %}<progress max="100" value="{{ job.progress }}">{{ job.progress }}%</progress>{% endif %}
   <dl class="facts">
     <dt>Owner</dt><dd>{{ job.owner }}</dd>

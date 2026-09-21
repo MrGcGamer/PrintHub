@@ -17,6 +17,7 @@ use crate::{
     gcode,
     inventory::Binding,
     jobs::{self, BlockReason, Job, JobError, JobState, JobTool, StartContext},
+    preview,
     schedule::{self, Rule},
     slicer::SliceSettings,
     store,
@@ -449,6 +450,7 @@ pub async fn slice_job(state: AppState, job_id: i64, settings: SliceSettings, sp
         if info.total_grams() <= 0.0 {
             return Err("The slicer reported no filament use.".to_owned());
         }
+        preview::prepare(data_dir.clone(), job_id);
         Ok(info)
     };
     let result = sliced.await;

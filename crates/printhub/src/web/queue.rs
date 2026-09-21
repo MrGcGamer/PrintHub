@@ -28,6 +28,7 @@ use crate::{
     gcode,
     inventory::{self, Spool},
     jobs::{self, Job, JobState, NewJob, Source},
+    preview,
     schedule::{self, Rule, RuleKind},
     slicer::{self, Plate, SliceSettings},
     store,
@@ -84,6 +85,8 @@ struct JobRow {
     state: &'static str,
     detail: String,
     estimate: String,
+    /// Whether there is G-code to draw a preview from.
+    preview: bool,
     printing: bool,
     can_cancel: bool,
     can_move: bool,
@@ -121,6 +124,7 @@ pub async fn jobs_page(
             owner: owner_name(&job),
             state: job.state.label(),
             estimate: estimate(&job),
+            preview: exists(&jobs::gcode_path(&state.config.data_dir, job.id)).await,
             printing,
             can_cancel: (manage || (printing && may_control))
                 && !job.state.is_finished()
@@ -438,6 +442,7 @@ async fn create_gcode_job(
     let id = jobs::create(&state.db, &new, store::now()).await?;
     place(temp, &jobs::gcode_path(&state.config.data_dir, id)).await?;
     jobs::store_gcode_info(&state.db, id, &info, None).await?;
+    preview::prepare(state.config.data_dir.clone(), id);
     Ok(id)
 }
 
@@ -767,6 +772,20 @@ pub async fn job_file(
     UrlPath((id, kind)): UrlPath<(i64, String)>,
 ) -> Result<Response, AppError> {
     let job = jobs::get(&state.db, id).await?.ok_or(AppError::NotFound)?;
+    if kind == "preview.png" {
+        let png = preview::for_job(&state.config.data_dir, id)
+            .await
+            .map_err(anyhow::Error::from)?
+            .ok_or(AppError::NotFound)?;
+        return Ok((
+            [
+                (header::CONTENT_TYPE, "image/png"),
+                (header::CACHE_CONTROL, "no-store"),
+            ],
+            png,
+        )
+            .into_response());
+    }
     let (path, extension, content_type) = match kind.as_str() {
         "model.stl" => (
             jobs::model_path(&state.config.data_dir, id),

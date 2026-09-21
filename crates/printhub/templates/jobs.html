@@ -22,10 +22,11 @@
   <p class="muted">No jobs yet.</p>
   {% else %}
   <table>
-    <thead><tr><th>Job</th><th>Owner</th><th>State <a class="help" href="/wiki/queue#job-states" aria-label="Help: job states">?</a></th><th>Estimate</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+    <thead><tr><th><span class="visually-hidden">Preview</span></th><th>Job</th><th>Owner</th><th>State <a class="help" href="/wiki/queue#job-states" aria-label="Help: job states">?</a></th><th>Estimate</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody>
       {% for row in rows %}
       <tr>
+        <td class="preview">{% if row.preview %}<img src="/jobs/{{ row.id }}/files/preview.png" alt="" width="48" height="48" loading="lazy">{% endif %}</td>
         <td><a href="/jobs/{{ row.id }}">{{ row.name }}</a>{% if !row.detail.is_empty() %}<br><span class="muted">{{ row.detail }}</span>{% if row.state == "Queued" %}<a class="help" href="/wiki/queue/waiting" aria-label="Help: why a job waits">?</a>{% endif %}{% endif %}</td>
         <td>{{ row.owner }}</td>
         <td>{{ row.state }}</td>

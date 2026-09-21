@@ -184,6 +184,9 @@ th, td { text-align: left; padding: 0.5rem 0.4rem; border-bottom: 1px solid var(
    border at its own height, not the row's. The wrapper keeps the cell a cell. */
 td.actions > .row-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 td form { margin: 0; }
+td.preview { width: 48px; padding-right: 0; }
+td.preview img { display: block; }
+img.preview { display: block; max-width: 100%; height: auto; margin: 0 auto 1rem; }
 
 .inline-form { display: flex; gap: 0.75rem; align-items: end; flex-wrap: wrap; }
 .inline-form label { margin: 0; }

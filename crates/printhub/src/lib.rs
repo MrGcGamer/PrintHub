@@ -7,6 +7,7 @@ pub mod dispatcher;
 pub mod gcode;
 pub mod inventory;
 pub mod jobs;
+pub mod preview;
 pub mod printer;
 pub mod probe;
 pub mod schedule;

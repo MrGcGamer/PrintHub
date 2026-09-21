@@ -1105,6 +1105,18 @@ async fn job_files_download_under_the_uploaded_name() {
     );
     assert_eq!(download.bytes().await.unwrap().as_ref(), gcode.as_slice());
 
+    let queue = app.get("/jobs", Some(&admin)).await.text().await.unwrap();
+    let preview_path = format!("{job_path}/files/preview.png");
+    assert!(queue.contains(&preview_path), "{queue}");
+    // The second request is served from the file the first one wrote.
+    for _ in 0..2 {
+        let preview = app.get(&preview_path, Some(&admin)).await;
+        assert_eq!(preview.status(), StatusCode::OK);
+        assert_eq!(preview.headers()["content-type"], "image/png");
+        let png = preview.bytes().await.unwrap();
+        assert!(png.starts_with(b"\x89PNG"));
+    }
+
     assert_eq!(
         app.get(&format!("{job_path}/files/model.stl"), Some(&admin))
             .await
