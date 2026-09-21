@@ -8,6 +8,7 @@
   --accent: #2b62c9;
   --on-accent: #ffffff;
   --brand: #ff9100;
+  --on-brand: #000000;
   --ok: #1d7038;
   --warn: #975400;
   --danger: #b0261e;
@@ -48,6 +49,107 @@
   }
 }
 
+/* Themes an account can pick (`accounts::Theme`); colours from GitHub's Primer tokens and
+   Docker Hub's MUI palette. Their series were validated like the default set, keeping only
+   steps inside the lightness band, which leaves Docker Hub with five hues. The logo follows
+   GitHub's mark (ink on the page, inverted in dark) and Docker Hub's white on its primary blue. Keep the
+   dark --panel values in step with `Theme::chrome`. */
+:root[data-theme="github"] {
+  --bg: #f6f8fa;
+  --panel: #ffffff;
+  --text: #1f2328;
+  --muted: #59636e;
+  --line: #d1d9e0;
+  --accent: #0969da;
+  --on-accent: #ffffff;
+  --brand: #1f2328;
+  --on-brand: #ffffff;
+  --ok: #1a7f37;
+  --warn: #9a6700;
+  --danger: #d1242f;
+  --series-1: #006edb;
+  --series-2: #eb670f;
+  --series-3: #167e53;
+  --series-4: #d43511;
+  --series-5: #894ceb;
+  --series-6: #30a147;
+  --series-7: #ce2c85;
+  --series-8: #866e04;
+  --series-other: #808fa3;
+}
+
+:root[data-theme="docker"] {
+  --bg: #f9f9fa;
+  --panel: #ffffff;
+  --text: #000000;
+  --muted: #677285;
+  --line: #e1e2e6;
+  --accent: #1d63ed;
+  --on-accent: #e5f2fc;
+  --brand: #1d63ed;
+  --on-brand: #ffffff;
+  --ok: #2e7f74;
+  --warn: #b85504;
+  --danger: #d52536;
+  --series-1: #1c90ed;
+  --series-2: #893607;
+  --series-3: #e950e2;
+  --series-4: #ff5b60;
+  --series-5: #7d2eff;
+  --series-6: #a9470f;
+  --series-7: #0c49c2;
+  --series-8: #b72132;
+  --series-other: #8993a5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="github"] {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --text: #f0f6fc;
+    --muted: #9198a1;
+    --line: #3d444d;
+    --accent: #4493f8;
+    --on-accent: #0d1117;
+    --brand: #f0f6fc;
+    --on-brand: #0d1117;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --danger: #f85149;
+    --series-1: #0576ff;
+    --series-2: #984b10;
+    --series-3: #18915e;
+    --series-4: #e1430e;
+    --series-5: #975bf1;
+    --series-6: #2f6f37;
+    --series-7: #d34591;
+    --series-8: #977b0c;
+    --series-other: #576270;
+  }
+
+  :root[data-theme="docker"] {
+    --bg: #080b0e;
+    --panel: #10151b;
+    --text: #ffffff;
+    --muted: #7794ab;
+    --line: #2d404e;
+    --accent: #2986ff;
+    --on-accent: #051b50;
+    --ok: #00a58c;
+    --warn: #db7512;
+    --danger: #e65264;
+    --series-1: #2986ff;
+    --series-2: #b75a00;
+    --series-3: #cc18c4;
+    --series-4: #e65264;
+    --series-5: #a371fc;
+    --series-6: #db7512;
+    --series-7: #1d63ed;
+    --series-8: #d1334c;
+    --series-other: #4e6a81;
+  }
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -72,10 +174,13 @@ a { color: var(--accent); }
 .bar nav { display: flex; align-items: center; gap: 1rem; }
 .bar form { margin: 0; }
 .brand { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 700; text-decoration: none; color: var(--text); }
-.brand img { display: block; }
-/* The logo tile's orange behind "Hub", black on it in either scheme: part of the wordmark,
-   which is why it follows neither --accent nor --text. */
-.hub { background: var(--brand); color: #000000; border-radius: 4px; padding: 0 0.2em; }
+.brand .logo { display: block; }
+.logo-tile { fill: var(--brand); }
+.logo-mark { fill: var(--on-brand); }
+/* The wordmark tile and the logo share --brand and --on-brand, which follow the theme but
+   neither --accent nor --text. logo.svg keeps PrintHub's orange for the favicon and the login
+   page, which have no account's theme to follow. */
+.hub { background: var(--brand); color: var(--on-brand); border-radius: 4px; padding: 0 0.2em; }
 .login-logo { display: block; margin: 0 0 0.75rem; }
 
 main { max-width: 72rem; margin: 0 auto; padding: 1.25rem; }

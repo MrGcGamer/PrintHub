@@ -303,6 +303,36 @@ pub async fn account_page(current: CurrentUser) -> Result<Response, AppError> {
 }
 
 #[derive(Deserialize)]
+pub struct ThemeForm {
+    theme: String,
+}
+
+pub async fn change_theme(
+    State(state): State<AppState>,
+    mut current: CurrentUser,
+    Form(form): Form<ThemeForm>,
+) -> Result<Response, AppError> {
+    let (status, notice, error) = match accounts::Theme::parse(&form.theme) {
+        Some(theme) => {
+            accounts::set_theme(&state.db, current.user.id, theme).await?;
+            current.user.theme = theme;
+            (StatusCode::OK, Some("Theme changed.".to_owned()), None)
+        }
+        None => (
+            StatusCode::BAD_REQUEST,
+            None,
+            Some("That theme does not exist.".to_owned()),
+        ),
+    };
+    let page = AccountPage {
+        user: Some(current.user),
+        notice,
+        error,
+    };
+    Ok((status, render(&page)?).into_response())
+}
+
+#[derive(Deserialize)]
 pub struct PasswordForm {
     current: String,
     password: String,

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!\", username, password_hash, role, disabled, created_at\n           FROM users WHERE username = ?",
+  "query": "SELECT id AS \"id!\", username, password_hash, role, disabled, created_at, theme\n           FROM users WHERE username = ?",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,17 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "name": "theme",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "theme"
+          }
+        }
       }
     ],
     "parameters": {
@@ -79,8 +90,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "15f93e080d23d485ae4fa8bd15ce9b9c9620d30ba819d38c7c201f2b8dec600f"
+  "hash": "9629a175e66088817a860af316771810f7108462e229f7a5b9387d4637234011"
 }

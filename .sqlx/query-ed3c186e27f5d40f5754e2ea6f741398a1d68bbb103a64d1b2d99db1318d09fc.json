@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!\", username, role, disabled, created_at FROM users WHERE id = ?",
+  "query": "SELECT u.id AS \"id!\", u.username, u.role, u.disabled, u.created_at, u.theme\n           FROM sessions s JOIN users u ON u.id = s.user_id\n           WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0",
   "describe": {
     "columns": [
       {
@@ -57,12 +57,24 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "name": "theme",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "theme"
+          }
+        }
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -70,5 +82,5 @@
       false
     ]
   },
-  "hash": "fd26b7ae2d5d89fde035342d7098e60cf16045ed5bb73f55ed32cac6e8d10d51"
+  "hash": "ed3c186e27f5d40f5754e2ea6f741398a1d68bbb103a64d1b2d99db1318d09fc"
 }

@@ -193,6 +193,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/account", get(pages::account_page))
         .route("/account/password", post(pages::change_password))
+        .route("/account/theme", post(pages::change_theme))
         .route("/admin/users", get(admin::users_page))
         .route("/admin/users/{id}/role", post(admin::set_role))
         .route("/admin/users/{id}/disabled", post(admin::set_disabled))

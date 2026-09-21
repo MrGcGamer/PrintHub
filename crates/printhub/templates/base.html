@@ -1,5 +1,6 @@
 <!doctype html>
-<html lang="en">
+{% let theme = crate::accounts::Theme::of(user) %}
+<html lang="en" data-theme="{{ theme.as_str() }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,8 +10,8 @@
 <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/static/manifest.webmanifest">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1e1e1c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="{{ theme.chrome()[0] }}" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="{{ theme.chrome()[1] }}" media="(prefers-color-scheme: dark)">
 {% block head %}{% endblock %}
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/htmx.min.js" defer></script>
@@ -19,7 +20,7 @@
 <body>
 {% if let Some(user) = user %}
 <header class="bar">
-  <a href="/" class="brand"><img src="/static/logo.svg" alt="" width="28" height="28">Print<span class="hub">Hub</span></a>
+  <a href="/" class="brand">{% include "logo.html" %}Print<span class="hub">Hub</span></a>
   <nav>
     <a href="/jobs">Queue</a>
     <a href="/inventory">Filament</a>

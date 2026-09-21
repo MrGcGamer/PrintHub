@@ -1,10 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Account · PrintHub{% endblock %}
 {% block content %}
-<form method="post" action="/account/password" class="panel narrow">
+<div class="narrow">
+{% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if let Some(user) = user %}
+<form method="post" action="/account/theme" class="panel">
+  <h1>Theme</h1>
+  <label>Colours
+    <select name="theme">
+      {% for theme in crate::accounts::Theme::ALL %}<option value="{{ theme.as_str() }}"{% if theme == user.theme %} selected{% endif %}>{{ theme.label() }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit">Use theme</button>
+  <p class="muted">Each theme follows your device's light or dark setting.</p>
+</form>
+{% endif %}
+<form method="post" action="/account/password" class="panel">
   <h1>Change password</h1>
-  {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
-  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   {% if let Some(user) = user %}<input type="text" name="username" value="{{ user.username }}" autocomplete="username" hidden>{% endif %}
   <label>Current password
     <input name="current" type="password" autocomplete="current-password" required>
@@ -18,4 +31,5 @@
   <button type="submit">Change password</button>
   <p class="muted">Changing it logs out your other devices.</p>
 </form>
+</div>
 {% endblock %}

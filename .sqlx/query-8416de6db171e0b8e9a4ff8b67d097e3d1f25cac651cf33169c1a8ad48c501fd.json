@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!\", username, role, disabled, created_at\n           FROM users ORDER BY username COLLATE NOCASE",
+  "query": "SELECT id AS \"id!\", username, role, disabled, created_at, theme\n           FROM users ORDER BY username COLLATE NOCASE",
   "describe": {
     "columns": [
       {
@@ -57,6 +57,17 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "name": "theme",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "theme"
+          }
+        }
       }
     ],
     "parameters": {
@@ -67,8 +78,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "e1e00224d3d40ee4eab51e2f1d91e7b13ef4397bfaa27c598f43760d324e1642"
+  "hash": "8416de6db171e0b8e9a4ff8b67d097e3d1f25cac651cf33169c1a8ad48c501fd"
 }

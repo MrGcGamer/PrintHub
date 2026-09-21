@@ -30,6 +30,55 @@ impl Role {
     }
 }
 
+/// The colour theme an account picked from the set compiled in. Each follows the browser's
+/// light or dark preference, so a theme is a palette family rather than one palette.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme {
+    #[default]
+    Printhub,
+    Github,
+    Docker,
+}
+
+impl Theme {
+    pub const ALL: [Self; 3] = [Self::Printhub, Self::Github, Self::Docker];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Printhub => "printhub",
+            Self::Github => "github",
+            Self::Docker => "docker",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|theme| theme.as_str() == raw)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Printhub => "PrintHub",
+            Self::Github => "GitHub",
+            Self::Docker => "Docker Hub",
+        }
+    }
+
+    /// Browser chrome colours, light then dark: the theme's `--panel` values in `app.css`,
+    /// which a `<meta name="theme-color">` cannot read.
+    pub fn chrome(self) -> [&'static str; 2] {
+        match self {
+            Self::Printhub => ["#ffffff", "#1e1e1c"],
+            Self::Github => ["#ffffff", "#151b23"],
+            Self::Docker => ["#ffffff", "#10151b"],
+        }
+    }
+
+    pub fn of(user: &Option<User>) -> Self {
+        user.as_ref().map(|user| user.theme).unwrap_or_default()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct User {
     pub id: i64,
@@ -37,6 +86,7 @@ pub struct User {
     pub role: Role,
     pub disabled: bool,
     pub created_at: i64,
+    pub theme: Theme,
 }
 
 impl User {
@@ -131,14 +181,22 @@ pub fn validate_password(password: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn user_from(id: i64, username: String, role: &str, disabled: i64, created_at: i64) -> User {
+fn user_from(
+    id: i64,
+    username: String,
+    role: &str,
+    disabled: i64,
+    created_at: i64,
+    theme: &str,
+) -> User {
     User {
         id,
         username,
-        // The column's CHECK constraint admits only the two values `Role::parse` knows.
+        // The CHECK constraints admit only the values `Role::parse` and `Theme::parse` know.
         role: Role::parse(role).unwrap_or(Role::Member),
         disabled: disabled != 0,
         created_at,
+        theme: Theme::parse(theme).unwrap_or_default(),
     }
 }
 
@@ -181,7 +239,7 @@ pub async fn create_user(
 /// caller can still spend the same time verifying.
 pub async fn login_record(db: &Db, username: &str) -> Result<Option<(User, String)>, AccountError> {
     let row = sqlx::query!(
-        r#"SELECT id AS "id!", username, password_hash, role, disabled, created_at
+        r#"SELECT id AS "id!", username, password_hash, role, disabled, created_at, theme
            FROM users WHERE username = ?"#,
         username,
     )
@@ -189,7 +247,14 @@ pub async fn login_record(db: &Db, username: &str) -> Result<Option<(User, Strin
     .await?;
     Ok(row.map(|r| {
         (
-            user_from(r.id, r.username, &r.role, r.disabled, r.created_at),
+            user_from(
+                r.id,
+                r.username,
+                &r.role,
+                r.disabled,
+                r.created_at,
+                &r.theme,
+            ),
             r.password_hash,
         )
     }))
@@ -197,24 +262,42 @@ pub async fn login_record(db: &Db, username: &str) -> Result<Option<(User, Strin
 
 pub async fn user(db: &Db, id: i64) -> Result<Option<User>, AccountError> {
     let row = sqlx::query!(
-        r#"SELECT id AS "id!", username, role, disabled, created_at FROM users WHERE id = ?"#,
+        r#"SELECT id AS "id!", username, role, disabled, created_at, theme FROM users WHERE id = ?"#,
         id,
     )
     .fetch_optional(db)
     .await?;
-    Ok(row.map(|r| user_from(r.id, r.username, &r.role, r.disabled, r.created_at)))
+    Ok(row.map(|r| {
+        user_from(
+            r.id,
+            r.username,
+            &r.role,
+            r.disabled,
+            r.created_at,
+            &r.theme,
+        )
+    }))
 }
 
 pub async fn users(db: &Db) -> Result<Vec<User>, AccountError> {
     let rows = sqlx::query!(
-        r#"SELECT id AS "id!", username, role, disabled, created_at
+        r#"SELECT id AS "id!", username, role, disabled, created_at, theme
            FROM users ORDER BY username COLLATE NOCASE"#
     )
     .fetch_all(db)
     .await?;
     Ok(rows
         .into_iter()
-        .map(|r| user_from(r.id, r.username, &r.role, r.disabled, r.created_at))
+        .map(|r| {
+            user_from(
+                r.id,
+                r.username,
+                &r.role,
+                r.disabled,
+                r.created_at,
+                &r.theme,
+            )
+        })
         .collect())
 }
 
@@ -331,7 +414,7 @@ async fn target_for_admin_change(
     id: i64,
 ) -> Result<User, AccountError> {
     let row = sqlx::query!(
-        r#"SELECT id AS "id!", username, role, disabled, created_at FROM users WHERE id = ?"#,
+        r#"SELECT id AS "id!", username, role, disabled, created_at, theme FROM users WHERE id = ?"#,
         id,
     )
     .fetch_optional(&mut *tx)
@@ -343,6 +426,7 @@ async fn target_for_admin_change(
         &row.role,
         row.disabled,
         row.created_at,
+        &row.theme,
     ))
 }
 
@@ -388,6 +472,14 @@ pub async fn set_password(
     Ok(())
 }
 
+pub async fn set_theme(db: &Db, id: i64, theme: Theme) -> Result<(), AccountError> {
+    let theme = theme.as_str();
+    sqlx::query!("UPDATE users SET theme = ? WHERE id = ?", theme, id)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
 pub async fn create_session(
     db: &Db,
     token_hash: &[u8],
@@ -413,7 +505,7 @@ pub async fn session_user(
     now: i64,
 ) -> Result<Option<User>, AccountError> {
     let row = sqlx::query!(
-        r#"SELECT u.id AS "id!", u.username, u.role, u.disabled, u.created_at
+        r#"SELECT u.id AS "id!", u.username, u.role, u.disabled, u.created_at, u.theme
            FROM sessions s JOIN users u ON u.id = s.user_id
            WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0"#,
         token_hash,
@@ -421,7 +513,16 @@ pub async fn session_user(
     )
     .fetch_optional(db)
     .await?;
-    Ok(row.map(|r| user_from(r.id, r.username, &r.role, r.disabled, r.created_at)))
+    Ok(row.map(|r| {
+        user_from(
+            r.id,
+            r.username,
+            &r.role,
+            r.disabled,
+            r.created_at,
+            &r.theme,
+        )
+    }))
 }
 
 pub async fn delete_session(db: &Db, token_hash: &[u8]) -> Result<(), AccountError> {

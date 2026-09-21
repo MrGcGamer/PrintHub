@@ -394,6 +394,46 @@ async fn login_logout_round_trip() {
 }
 
 #[tokio::test]
+async fn a_picked_theme_recolours_every_page_for_that_user_only() {
+    let app = app().await;
+    let sam = app.member("sam").await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let login = app.get("/login", None).await.text().await.unwrap();
+    assert!(login.contains(r#"data-theme="printhub""#), "{login}");
+
+    let picked = app
+        .post("/account/theme", Some(&sam), &[("theme", "docker")])
+        .await;
+    assert_eq!(picked.status(), StatusCode::OK);
+    assert!(
+        picked
+            .text()
+            .await
+            .unwrap()
+            .contains(r#"value="docker" selected"#)
+    );
+
+    let jobs = app.get("/jobs", Some(&sam)).await.text().await.unwrap();
+    assert!(jobs.contains(r#"data-theme="docker""#), "{jobs}");
+    assert!(
+        jobs.contains(r#"class="logo-tile""#),
+        "the logo is inline so it can take the theme"
+    );
+    assert!(jobs.contains(r##"<meta name="theme-color" content="#10151b""##));
+    let theirs = app.get("/jobs", Some(&admin)).await.text().await.unwrap();
+    assert!(theirs.contains(r#"data-theme="printhub""#));
+
+    assert_eq!(
+        app.post("/account/theme", Some(&sam), &[("theme", "neon")])
+            .await
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let still = app.get("/", Some(&sam)).await.text().await.unwrap();
+    assert!(still.contains(r#"data-theme="docker""#));
+}
+
+#[tokio::test]
 async fn failed_logins_are_rate_limited() {
     let app = app().await;
     for _ in 0..5 {
