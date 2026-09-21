@@ -275,6 +275,7 @@ pub async fn serve(config: Config) -> anyhow::Result<()> {
             http,
             camera_url(&config),
             camera::IDLE_GRACE,
+            camera::STALL_TIMEOUT,
         ))
     } else {
         None

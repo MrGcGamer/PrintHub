@@ -15,7 +15,7 @@ use thiserror::Error;
 use tokio::{
     sync::broadcast,
     task::JoinHandle,
-    time::{Instant, interval, sleep},
+    time::{Instant, interval, sleep, sleep_until},
 };
 
 /// Buffered stream data without a complete frame beyond this means the stream is not the
@@ -165,6 +165,10 @@ pub async fn grab_frame(
 /// a reconnect to a camera that admits one client at a time.
 pub const IDLE_GRACE: Duration = Duration::from_secs(5);
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
+/// An open connection that delivers no frame for this long is dropped and reopened: a camera
+/// that hangs, or a connection left half-open, never ends the stream on its own.
+// ponytail: guessed well above the CC2's healthy frame gap, which is unmeasured.
+pub const STALL_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Part boundary of the stream served to browsers.
 pub const BOUNDARY: &str = "printhub-frame";
@@ -180,6 +184,7 @@ struct HubInner {
     http: reqwest::Client,
     url: String,
     idle_grace: Duration,
+    stall_timeout: Duration,
     frames: broadcast::Sender<Bytes>,
     latest: Mutex<Option<(Bytes, Instant)>>,
     last_error: Mutex<Option<String>>,
@@ -202,7 +207,12 @@ impl Drop for ViewerGuard {
 }
 
 impl CameraHub {
-    pub fn new(http: reqwest::Client, url: impl Into<String>, idle_grace: Duration) -> Self {
+    pub fn new(
+        http: reqwest::Client,
+        url: impl Into<String>,
+        idle_grace: Duration,
+        stall_timeout: Duration,
+    ) -> Self {
         // Viewers only ever want the newest frame; a lagging receiver skips ahead.
         let (frames, _) = broadcast::channel(2);
         Self {
@@ -210,6 +220,7 @@ impl CameraHub {
                 http,
                 url: url.into(),
                 idle_grace,
+                stall_timeout,
                 frames,
                 latest: Mutex::default(),
                 last_error: Mutex::default(),
@@ -345,6 +356,7 @@ impl HubInner {
             .ok_or(CameraError::NotMjpeg(content_type))?;
         let mut stream = response.bytes_stream();
         let mut check = interval(Duration::from_millis(500));
+        let mut deadline = Instant::now() + self.stall_timeout;
         loop {
             tokio::select! {
                 chunk = stream.next() => {
@@ -354,6 +366,7 @@ impl HubInner {
                     for frame in parser.push(&chunk?) {
                         *self.latest.lock().unwrap() = Some((frame.clone(), Instant::now()));
                         let _ = self.frames.send(frame);
+                        deadline = Instant::now() + self.stall_timeout;
                     }
                     self.last_error.lock().unwrap().take();
                 }
@@ -361,6 +374,9 @@ impl HubInner {
                     if self.should_retire(idle_since) {
                         return Ok(());
                     }
+                }
+                _ = sleep_until(deadline) => {
+                    return Err(CameraError::Timeout(self.stall_timeout));
                 }
             }
         }
@@ -438,5 +454,67 @@ mod tests {
                 .unwrap();
         let frames = parser.push(&part("--frame_boundary", &tricky, true));
         assert_eq!(frames, vec![Bytes::from(tricky)]);
+    }
+
+    /// A camera that streams for a while, then stops sending while keeping the socket open.
+    #[tokio::test]
+    async fn stalled_stream_is_reopened() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let _ = socket.read(&mut [0; 1024]).await;
+                    socket
+                        .write_all(
+                            b"HTTP/1.1 200 OK\r\nConnection: close\r\n\
+                              Content-Type: multipart/x-mixed-replace; boundary=frame_boundary\r\n\r\n",
+                        )
+                        .await
+                        .unwrap();
+                    for _ in 0..10 {
+                        socket
+                            .write_all(&part("--frame_boundary", JPEG_A, true))
+                            .await
+                            .unwrap();
+                        sleep(Duration::from_millis(50)).await;
+                    }
+                    sleep(Duration::from_secs(60)).await;
+                });
+            }
+        });
+
+        let stall = Duration::from_millis(200);
+        let hub = CameraHub::new(reqwest::Client::new(), url, IDLE_GRACE, stall);
+        let mut viewer = hub.watch();
+        viewer.next_frame().await.unwrap();
+
+        // Frames 50 ms apart, well past the stall timeout in total, must not trip it.
+        sleep(Duration::from_millis(400)).await;
+        assert_eq!(hub.last_error(), None);
+
+        let error = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if let Some(error) = hub.last_error() {
+                    return error;
+                }
+                sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(error, CameraError::Timeout(stall).to_string());
+
+        tokio::time::timeout(RECONNECT_DELAY + Duration::from_secs(1), async {
+            while hub.upstream_connects() < 2 {
+                sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        viewer.next_frame().await.unwrap();
     }
 }

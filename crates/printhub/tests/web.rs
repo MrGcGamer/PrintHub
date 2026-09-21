@@ -12,7 +12,7 @@ use futures::StreamExt;
 use printhub::{
     accounts::{self, Role},
     auth,
-    camera::CameraHub,
+    camera::{self, CameraHub},
     cc2::{ClientConfig, PrinterClient, Timing},
     config::Config,
     dispatcher, gcode, inventory,
@@ -91,6 +91,7 @@ async fn app_with(slicer: Option<Slicer>) -> App {
         reqwest::Client::new(),
         web::camera_url(&config),
         Duration::from_millis(300),
+        camera::STALL_TIMEOUT,
     );
     let link = PrinterLink::start(&config);
     let state = AppState::new(db.clone(), config, link, Some(camera), slicer)
