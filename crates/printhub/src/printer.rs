@@ -2,11 +2,11 @@
 //! printer is off, then keeps one [`PrinterClient`] alive for the life of the process.
 
 use std::{
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     time::Duration,
 };
 
-use tokio::sync::watch;
+use tokio::{sync::watch, task::JoinHandle};
 
 use crate::{
     cc2::{ClientConfig, LinkState, PrinterClient, PrinterSnapshot, Timing, discovery},
@@ -19,6 +19,7 @@ const DISCOVERY_RETRY: Duration = Duration::from_secs(30);
 pub struct PrinterLink {
     snapshot: watch::Receiver<PrinterSnapshot>,
     client: Arc<OnceLock<PrinterClient>>,
+    supervisor: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 struct Settings {
@@ -30,22 +31,26 @@ struct Settings {
 
 impl PrinterLink {
     pub fn start(config: &Config) -> Self {
-        let (tx, snapshot) = watch::channel(PrinterSnapshot {
-            link: LinkState::Connecting,
-            status: None,
-            canvas: None,
-            attributes: None,
-            last_seen: None,
-        });
+        let (tx, snapshot) = watch::channel(PrinterSnapshot::default());
         let client = Arc::new(OnceLock::new());
+        let supervisor = Arc::default();
         let settings = Settings {
             host: config.printer_host.clone(),
             serial: config.printer_sn.clone(),
             mqtt_port: config.printer_mqtt_port,
             access_code: config.printer_access_code.clone(),
         };
-        tokio::spawn(run(settings, tx, Arc::clone(&client)));
-        Self { snapshot, client }
+        tokio::spawn(run(
+            settings,
+            tx,
+            Arc::clone(&client),
+            Arc::clone(&supervisor),
+        ));
+        Self {
+            snapshot,
+            client,
+            supervisor,
+        }
     }
 
     pub fn subscribe(&self) -> watch::Receiver<PrinterSnapshot> {
@@ -60,12 +65,22 @@ impl PrinterLink {
     pub fn client(&self) -> Option<&PrinterClient> {
         self.client.get()
     }
+
+    /// Frees the printer's client slot now rather than after its 65 s timeout, which matters to
+    /// a restarted PrintHub and to the phone app, since the printer admits only a few clients.
+    pub async fn shutdown(&self) {
+        let supervisor = self.supervisor.lock().unwrap().take();
+        if let (Some(client), Some(supervisor)) = (self.client.get(), supervisor) {
+            client.clone().shutdown(supervisor).await;
+        }
+    }
 }
 
 async fn run(
     settings: Settings,
     tx: watch::Sender<PrinterSnapshot>,
     cell: Arc<OnceLock<PrinterClient>>,
+    supervisor_slot: Arc<Mutex<Option<JoinHandle<()>>>>,
 ) {
     let serial = match settings.serial {
         Some(serial) => serial,
@@ -84,7 +99,7 @@ async fn run(
         },
     };
 
-    let (client, _supervisor) = PrinterClient::start(ClientConfig {
+    let (client, supervisor) = PrinterClient::start(ClientConfig {
         host: settings.host,
         port: settings.mqtt_port,
         serial,
@@ -92,6 +107,7 @@ async fn run(
         timing: Timing::default(),
     });
     let mut updates = client.subscribe();
+    *supervisor_slot.lock().unwrap() = Some(supervisor);
     let _ = cell.set(client);
     loop {
         let snapshot = updates.borrow_and_update().clone();

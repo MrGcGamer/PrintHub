@@ -1,7 +1,7 @@
 ---
 title: Print queue
 summary: How a job moves from upload to finished, and what can be done with it on the way.
-keywords: job, jobs, state, status, confirm, cancel, stop, retry, requeue, order, move, reorder, download, file, stl, gcode
+keywords: job, jobs, state, status, confirm, cancel, stop, retry, requeue, order, move, reorder, download, file, files, storage, disk, space, stl, gcode
 order: 2
 ---
 The queue page lists every unfinished job, in the order they will be tried, and the 20 that
@@ -49,6 +49,11 @@ back.
 A job's page links its files under *Files*: the model as uploaded, and the G-code, once there is
 some. They download under the name the job was uploaded with. Anyone logged in can take them,
 which is the way to reslice someone else's model yourself or to check what the printer was sent.
+
+The printer holds a job's G-code only while it prints: PrintHub deletes it there once the print
+ends, and sends it again for a retry. PrintHub itself keeps the files until an admin deletes them
+under *Storage*. The job stays in the history, but without its files it can no longer be
+downloaded or retried.
 
 ## Cancelling and stopping
 

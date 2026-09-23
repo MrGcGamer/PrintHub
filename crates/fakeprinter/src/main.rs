@@ -1,5 +1,6 @@
 //! Runs the fake printer until Ctrl-C and prints the environment that points PrintHub at it.
-//! `FAKE_PRINT_SECONDS=120` makes every started print run to completion in that many seconds.
+//! `FAKE_PRINT_SECONDS=120` makes every started print run to completion in that many seconds;
+//! unset or 0, a print stays at 0% until something drives it.
 
 use fakeprinter::{FakePrinter, Options};
 use tracing_subscriber::EnvFilter;
@@ -17,6 +18,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some(seconds) = std::env::var("FAKE_PRINT_SECONDS")
         .ok()
         .and_then(|value| value.parse().ok())
+        .filter(|seconds| *seconds > 0)
     {
         printer.simulate_prints(std::time::Duration::from_secs(seconds));
     }

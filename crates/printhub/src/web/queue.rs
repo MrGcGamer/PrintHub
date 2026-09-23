@@ -1,5 +1,5 @@
-//! The print queue: uploading and confirming jobs, cancelling and reordering them, the bed-clear
-//! gate, and the admin's print windows.
+//! The print queue: uploading and confirming jobs, cancelling and reordering them, and the
+//! bed-clear gate.
 
 use std::{collections::HashMap, path::Path};
 
@@ -29,7 +29,6 @@ use crate::{
     inventory::{self, Spool},
     jobs::{self, Job, JobState, NewJob, Source},
     preview,
-    schedule::{self, Rule, RuleKind},
     slicer::{self, Plate, SliceSettings},
     store,
 };
@@ -38,16 +37,6 @@ use crate::{
 const RECENT_FINISHED: i64 = 20;
 const DEFAULT_INFILL: &str = "15";
 const DEFAULT_SCALE: &str = "100";
-
-fn can_manage(user: &User, job: &Job) -> bool {
-    user.is_admin() || job.owner_id() == Some(user.id)
-}
-
-/// Controlling a running print is the one thing `ControlPrint` opens to somebody who neither
-/// owns the job nor is an admin. Everything else a job offers stays with `can_manage`.
-async fn may_control_any_print(state: &AppState, user: &User) -> Result<bool, AppError> {
-    Ok(accounts::has_permission(&state.db, user, Permission::ControlPrint).await?)
-}
 
 fn owner_name(job: &Job) -> String {
     job.owner
@@ -137,11 +126,7 @@ pub(super) async fn upcoming_rows(
     limit: usize,
 ) -> Result<(Vec<JobRow>, usize), AppError> {
     let readiness = Readiness::load(state).await?;
-    let mut jobs: Vec<Job> = jobs::list(&state.db, 0)
-        .await?
-        .into_iter()
-        .filter(|job| !job.state.is_finished())
-        .collect();
+    let mut jobs = jobs::list(&state.db, 0).await?;
     let total = jobs.len();
     jobs.truncate(limit);
     Ok((job_rows(state, user, &readiness, jobs).await?, total))
@@ -153,7 +138,7 @@ async fn job_rows(
     readiness: &Readiness,
     jobs: Vec<Job>,
 ) -> Result<Vec<JobRow>, AppError> {
-    let may_control = may_control_any_print(state, user).await?;
+    let control_any = accounts::has_permission(&state.db, user, Permission::ControlPrint).await?;
     let bindings = state.bindings.borrow().clone();
     let spools = inventory::spools(&state.db, true).await?;
     let spools: HashMap<i64, &Spool> = spools.iter().map(|spool| (spool.id, spool)).collect();
@@ -203,8 +188,7 @@ async fn job_rows(
                 }
             })
             .collect();
-        let manage = can_manage(user, &job);
-        let printing = job.state == JobState::Printing;
+        let has_gcode = exists(&jobs::gcode_path(&state.config.data_dir, job.id)).await;
         rows.push(JobRow {
             id: job.id,
             owner: owner_name(&job),
@@ -212,13 +196,11 @@ async fn job_rows(
             estimate: estimate(&job),
             position,
             filament,
-            preview: exists(&jobs::gcode_path(&state.config.data_dir, job.id)).await,
-            printing,
-            can_cancel: (manage || (printing && may_control))
-                && !job.state.is_finished()
-                && job.state != JobState::Uploading,
+            preview: has_gcode,
+            printing: job.state == JobState::Printing,
+            can_cancel: job.cancellable_by(user, control_any),
             can_move: user.is_admin() && job.state == JobState::Queued,
-            can_requeue: manage && job.state == JobState::Failed && job.estimated_seconds.is_some(),
+            can_requeue: job.retryable_by(user, &tools, has_gcode),
             detail,
             name: job.name,
         });
@@ -274,13 +256,13 @@ async fn new_job_form(
             } else {
                 field("process")
             };
-            let choices = |names: Vec<String>, wanted: &str| -> Vec<Choice> {
+            let choices = |names: &[String], wanted: &str| -> Vec<Choice> {
                 names
-                    .into_iter()
+                    .iter()
                     .map(|name| Choice {
                         selected: name == wanted,
                         value: name.clone(),
-                        name,
+                        name: name.clone(),
                     })
                     .collect()
             };
@@ -555,7 +537,7 @@ async fn create_stl_job(
     }
     let filaments = slicer.filaments(nozzle);
     let filament = if field("filament").is_empty() {
-        default_filament(&filaments, &spool).ok_or_else(|| {
+        default_filament(filaments, &spool).ok_or_else(|| {
             user_problem(format!(
                 "No filament profile matches {}. Choose one.",
                 spool.material
@@ -720,10 +702,8 @@ async fn job_detail(
 ) -> Result<Response, AppError> {
     let job = jobs::get(&state.db, id).await?.ok_or(AppError::NotFound)?;
     let tools = jobs::tools(&state.db, id).await?;
-    let manage = can_manage(&user, &job);
-    let printing = job.state == JobState::Printing;
-    let may_cancel = manage || (printing && may_control_any_print(state, &user).await?);
-    let confirm = manage && job.state == JobState::AwaitingConfirm;
+    let control_any = accounts::has_permission(&state.db, &user, Permission::ControlPrint).await?;
+    let confirm = job.managed_by(&user) && job.state == JobState::AwaitingConfirm;
     let blocked = if job.state == JobState::Queued {
         let readiness = Readiness::load(state).await?;
         readiness
@@ -801,8 +781,8 @@ async fn job_detail(
     } else {
         StatusCode::OK
     };
+    let has_gcode = exists(&jobs::gcode_path(&state.config.data_dir, id)).await;
     let page = JobPage {
-        user: Some(user),
         job: JobView {
             id: job.id,
             owner: owner_name(&job),
@@ -817,19 +797,18 @@ async fn job_detail(
             estimate: estimate(&job),
             progress: job.progress,
             slicing: job.state == JobState::Slicing,
-            printing,
-            can_cancel: may_cancel && !job.state.is_finished() && job.state != JobState::Uploading,
-            can_requeue: manage && job.state == JobState::Failed && !tools.is_empty(),
+            printing: job.state == JobState::Printing,
+            can_cancel: job.cancellable_by(&user, control_any),
+            can_requeue: job.retryable_by(&user, &tools, has_gcode),
             created: views::format_time(job.created_at),
             model_file: exists(&jobs::model_path(&state.config.data_dir, id))
                 .await
                 .then(|| download_name(&job.name, job.id, "stl")),
-            gcode_file: exists(&jobs::gcode_path(&state.config.data_dir, id))
-                .await
-                .then(|| download_name(&job.name, job.id, "gcode")),
+            gcode_file: has_gcode.then(|| download_name(&job.name, job.id, "gcode")),
             error: job.error,
             name: job.name,
         },
+        user: Some(user),
         tools: tool_rows,
         confirm,
         blocked,
@@ -930,13 +909,13 @@ fn download_name(uploaded: &str, id: i64, extension: &str) -> String {
     }
 }
 
-async fn exists(path: &Path) -> bool {
+pub(super) async fn exists(path: &Path) -> bool {
     tokio::fs::try_exists(path).await.unwrap_or(false)
 }
 
 async fn managed_job(state: &AppState, user: &User, id: i64) -> Result<Job, AppError> {
     let job = jobs::get(&state.db, id).await?.ok_or(AppError::NotFound)?;
-    if !can_manage(user, &job) {
+    if !job.managed_by(user) {
         return Err(AppError::Forbidden);
     }
     Ok(job)
@@ -994,11 +973,18 @@ pub async fn cancel_job(
     UrlPath(id): UrlPath<i64>,
 ) -> Result<Response, AppError> {
     let job = jobs::get(&state.db, id).await?.ok_or(AppError::NotFound)?;
-    let printing = job.state == JobState::Printing;
-    let permitted = can_manage(&current.user, &job)
-        || (printing && may_control_any_print(&state, &current.user).await?);
-    if !permitted {
-        return Err(AppError::Forbidden);
+    let control_any =
+        accounts::has_permission(&state.db, &current.user, Permission::ControlPrint).await?;
+    if !job.cancellable_by(&current.user, control_any) {
+        return Err(match job.state {
+            JobState::Uploading => AppError::BadRequest(
+                "The job is being sent to the printer. Stop it once it prints.".into(),
+            ),
+            state if state.is_finished() => {
+                AppError::BadRequest("This job has already ended.".into())
+            }
+            _ => AppError::Forbidden,
+        });
     }
     match job.state {
         JobState::Printing => {
@@ -1012,12 +998,6 @@ pub async fn cancel_job(
                 .map_err(|err| AppError::Unavailable(format!("The printer did not stop: {err}")))?;
             tracing::info!(username = %current.user.username, job = id, "stop sent");
             Ok(Redirect::to(&format!("/jobs/{id}?done=stopping")).into_response())
-        }
-        JobState::Uploading => Err(AppError::BadRequest(
-            "The job is being sent to the printer. Stop it once it prints.".into(),
-        )),
-        finished if finished.is_finished() => {
-            Err(AppError::BadRequest("This job has already ended.".into()))
         }
         other => {
             jobs::transition(
@@ -1041,10 +1021,9 @@ pub async fn requeue_job(
     UrlPath(id): UrlPath<i64>,
 ) -> Result<Response, AppError> {
     let job = managed_job(&state, &current.user, id).await?;
-    let has_gcode = tokio::fs::try_exists(jobs::gcode_path(&state.config.data_dir, id))
-        .await
-        .unwrap_or(false);
-    if job.state != JobState::Failed || !has_gcode || jobs::tools(&state.db, id).await?.is_empty() {
+    let has_gcode = exists(&jobs::gcode_path(&state.config.data_dir, id)).await;
+    let tools = jobs::tools(&state.db, id).await?;
+    if !job.retryable_by(&current.user, &tools, has_gcode) {
         return Err(AppError::BadRequest(
             "Only a failed job with sliced G-code can be retried.".into(),
         ));
@@ -1088,189 +1067,6 @@ pub async fn mark_bed_clear(
     Ok(Redirect::to("/jobs?done=bed").into_response())
 }
 
-#[derive(Template)]
-#[template(path = "schedule.html")]
-struct SchedulePage {
-    user: Option<User>,
-    rules: Vec<RuleRow>,
-    timezone: String,
-    days: [&'static str; 7],
-    notice: Option<&'static str>,
-    error: Option<String>,
-}
-
-struct RuleRow {
-    id: i64,
-    kind: &'static str,
-    label: String,
-    days: String,
-    hours: String,
-    finish: bool,
-}
-
-pub async fn schedule_page(
-    State(state): State<AppState>,
-    AdminUser(admin): AdminUser,
-    Query(outcome): Query<Outcome>,
-) -> Result<Response, AppError> {
-    let notice = outcome.done.as_deref().and_then(|code| match code {
-        "added" => Some("Rule added."),
-        "deleted" => Some("Rule deleted."),
-        _ => None,
-    });
-    schedule_view(&state, admin.user, notice, None).await
-}
-
-async fn schedule_view(
-    state: &AppState,
-    user: User,
-    notice: Option<&'static str>,
-    error: Option<String>,
-) -> Result<Response, AppError> {
-    let rules = schedule::rules(&state.db)
-        .await?
-        .into_iter()
-        .map(|(id, rule)| RuleRow {
-            id,
-            kind: match rule.kind {
-                RuleKind::Allow => "Allow",
-                RuleKind::Deny => "Deny",
-            },
-            days: day_summary(rule.days),
-            hours: format!(
-                "{}–{}",
-                schedule::format_time(rule.start_minute),
-                schedule::format_time(rule.end_minute)
-            ),
-            finish: rule.must_finish_before,
-            label: rule.label,
-        })
-        .collect();
-    let status = if error.is_some() {
-        StatusCode::BAD_REQUEST
-    } else {
-        StatusCode::OK
-    };
-    let page = SchedulePage {
-        user: Some(user),
-        rules,
-        timezone: state
-            .config
-            .timezone
-            .iana_name()
-            .unwrap_or("UTC")
-            .to_owned(),
-        days: schedule::DAY_NAMES,
-        notice,
-        error,
-    };
-    Ok((status, render(&page)?).into_response())
-}
-
-fn day_summary(days: u8) -> String {
-    match days {
-        0b111_1111 => "Every day".into(),
-        0b001_1111 => "Weekdays".into(),
-        0b110_0000 => "Weekends".into(),
-        _ => schedule::DAY_NAMES
-            .iter()
-            .enumerate()
-            .filter(|(bit, _)| days & (1 << bit) != 0)
-            .map(|(_, name)| *name)
-            .collect::<Vec<_>>()
-            .join(", "),
-    }
-}
-
-/// Checkboxes are sent only when ticked, and repeated keys do not deserialize into a list, so
-/// each day has its own field.
-#[derive(Default, Deserialize)]
-#[serde(default)]
-pub struct RuleForm {
-    kind: String,
-    label: String,
-    start: String,
-    end: String,
-    must_finish_before: Option<String>,
-    day0: Option<String>,
-    day1: Option<String>,
-    day2: Option<String>,
-    day3: Option<String>,
-    day4: Option<String>,
-    day5: Option<String>,
-    day6: Option<String>,
-}
-
-impl RuleForm {
-    fn rule(&self) -> Result<Rule, String> {
-        let kind = RuleKind::parse(&self.kind).ok_or("Choose allow or deny.")?;
-        let days = [
-            &self.day0, &self.day1, &self.day2, &self.day3, &self.day4, &self.day5, &self.day6,
-        ]
-        .iter()
-        .enumerate()
-        .filter(|(_, ticked)| ticked.is_some())
-        .fold(0u8, |days, (bit, _)| days | 1 << bit);
-        if days == 0 {
-            return Err("Tick at least one day.".into());
-        }
-        let start = schedule::parse_time(&self.start).ok_or("Enter the start as HH:MM.")?;
-        let end = schedule::parse_time(&self.end).ok_or("Enter the end as HH:MM.")?;
-        let label = self.label.trim();
-        if label.chars().count() > inventory::TEXT_MAX {
-            return Err(format!(
-                "Names are limited to {} characters.",
-                inventory::TEXT_MAX
-            ));
-        }
-        Ok(Rule {
-            kind,
-            days,
-            start_minute: start,
-            end_minute: end,
-            must_finish_before: self.must_finish_before.is_some(),
-            label: if label.is_empty() {
-                format!(
-                    "{} {}–{}",
-                    if kind == RuleKind::Allow {
-                        "Allow"
-                    } else {
-                        "Deny"
-                    },
-                    schedule::format_time(start),
-                    schedule::format_time(end)
-                )
-            } else {
-                label.to_owned()
-            },
-        })
-    }
-}
-
-pub async fn add_rule(
-    State(state): State<AppState>,
-    AdminUser(admin): AdminUser,
-    Form(form): Form<RuleForm>,
-) -> Result<Response, AppError> {
-    let rule = match form.rule() {
-        Ok(rule) => rule,
-        Err(error) => return schedule_view(&state, admin.user, None, Some(error)).await,
-    };
-    schedule::add_rule(&state.db, &rule, store::now()).await?;
-    state.queue_changed.notify_one();
-    Ok(Redirect::to("/admin/schedule?done=added").into_response())
-}
-
-pub async fn delete_rule(
-    State(state): State<AppState>,
-    AdminUser(_admin): AdminUser,
-    UrlPath(id): UrlPath<i64>,
-) -> Result<Response, AppError> {
-    schedule::delete_rule(&state.db, id).await?;
-    state.queue_changed.notify_one();
-    Ok(Redirect::to("/admin/schedule?done=deleted").into_response())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1280,40 +1076,5 @@ mod tests {
         assert_eq!(clean_file_name("C:\\models\\benchy.stl"), "benchy.stl");
         assert_eq!(clean_file_name("../../etc/passwd"), "passwd");
         assert_eq!(clean_file_name(&"a".repeat(300)).len(), 120);
-    }
-
-    #[test]
-    fn day_summaries() {
-        assert_eq!(day_summary(0b111_1111), "Every day");
-        assert_eq!(day_summary(0b001_1111), "Weekdays");
-        assert_eq!(day_summary(0b000_0101), "Mon, Wed");
-    }
-
-    #[test]
-    fn rule_form_validation() {
-        let form = RuleForm {
-            kind: "deny".into(),
-            start: "22:00".into(),
-            end: "07:00".into(),
-            day4: Some("on".into()),
-            day5: Some("on".into()),
-            must_finish_before: Some("on".into()),
-            ..RuleForm::default()
-        };
-        let rule = form.rule().unwrap();
-        assert_eq!(rule.days, 0b011_0000);
-        assert_eq!((rule.start_minute, rule.end_minute), (1320, 420));
-        assert!(rule.must_finish_before);
-        assert_eq!(rule.label, "Deny 22:00–07:00");
-
-        assert!(
-            RuleForm {
-                day4: None,
-                day5: None,
-                ..form
-            }
-            .rule()
-            .is_err()
-        );
     }
 }

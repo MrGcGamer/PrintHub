@@ -2,10 +2,10 @@ use std::{net::Ipv4Addr, process::ExitCode, time::Duration};
 
 use clap::{Parser, Subcommand};
 use printhub::{
+    app,
     config::Config,
     gcode, probe,
     slicer::{self, Plate, SliceSettings, Slicer},
-    web,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -60,7 +60,7 @@ async fn main() -> ExitCode {
     };
 
     let outcome = match cli.command {
-        Command::Serve => web::serve(config).await.map(|()| ExitCode::SUCCESS),
+        Command::Serve => app::serve(config).await.map(|()| ExitCode::SUCCESS),
         Command::Probe => probe::run(&config).await,
         Command::Healthcheck => Ok(healthcheck(&config).await),
         Command::SliceSelftest => slice_selftest(&config).await,

@@ -12,6 +12,8 @@ use printhub::{
         model::{MachineState, TrayState, printing_sub_status, task_status},
         upload::{self, Uploader},
     },
+    config::Config,
+    printer::PrinterLink,
 };
 use serde_json::json;
 use tokio::{task::JoinHandle, time::timeout};
@@ -268,6 +270,40 @@ async fn shutdown_returns_promptly() {
 }
 
 #[tokio::test]
+async fn the_server_link_disconnects_on_shutdown() {
+    let printer = printer().await;
+    let port = printer.mqtt_addr.port().to_string();
+    let config = Config::from_lookup(|var| match var {
+        "PRINTER_HOST" => Some("127.0.0.1".into()),
+        "PRINTER_SN" => Some(printer.serial.clone()),
+        "PRINTER_ACCESS_CODE" => Some(printer.password.clone()),
+        "PRINTER_MQTT_PORT" => Some(port.clone()),
+        _ => None,
+    })
+    .unwrap();
+    let link = PrinterLink::start(&config);
+    let client = timeout(WAIT, async {
+        loop {
+            if let Some(client) = link.client() {
+                return client.clone();
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the link starts a client");
+    client.wait_until_registered(WAIT).await.expect("registers");
+
+    timeout(Duration::from_secs(3), link.shutdown())
+        .await
+        .expect("shutdown completes");
+    assert_eq!(
+        client.snapshot().link,
+        LinkState::Disconnected("shut down".into())
+    );
+}
+
+#[tokio::test]
 async fn chunked_upload_then_file_detail() {
     let printer = printer().await;
     let (client, _supervisor) = connect(&printer).await;
@@ -293,6 +329,17 @@ async fn chunked_upload_then_file_detail() {
 
     let detail = client.file_detail("big.gcode").await.unwrap();
     assert_eq!(detail.size as usize, data.len());
+
+    client.delete_file("big.gcode").await.unwrap();
+    assert!(printer.files().is_empty());
+    assert_eq!(
+        client
+            .delete_file("big.gcode")
+            .await
+            .unwrap_err()
+            .printer_code(),
+        Some(error_code::PRINT_FILE_NOT_FOUND)
+    );
 }
 
 #[tokio::test]

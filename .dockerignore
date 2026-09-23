@@ -4,5 +4,7 @@
 /.claude
 /target
 /data
-/STATUS.md
-/CLEANUP.md
+# Notes and local scripts: none is compiled, and a change to one would rebuild the image.
+/*.md
+/start-local.sh
+/stop-local.sh

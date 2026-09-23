@@ -54,7 +54,7 @@ pub async fn dashboard(
         accounts::has_permission(&state.db, &current.user, Permission::ControlPrint).await?,
         &bindings,
         &mounted,
-        super::layer_total(&state, &snapshot).await,
+        state.layer_total(&snapshot).await,
     );
     let nozzle_choices = may_record_nozzle.then(|| {
         Nozzle::ALL

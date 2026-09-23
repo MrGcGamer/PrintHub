@@ -41,7 +41,7 @@ pub fn prepare(data_dir: PathBuf, id: i64) {
 /// `None` while the G-code is not there, or when it draws nothing.
 pub async fn for_job(data_dir: &Path, id: i64) -> io::Result<Option<Vec<u8>>> {
     let gcode = jobs::gcode_path(data_dir, id);
-    let target = jobs::dir(data_dir, id).join("preview.png");
+    let target = jobs::preview_path(data_dir, id);
     if let Ok(png) = tokio::fs::read(&target).await {
         return Ok(Some(png));
     }

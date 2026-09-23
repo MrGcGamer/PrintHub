@@ -20,7 +20,7 @@ There are two roles. Admins can do everything members can.
 | Record the mounted nozzle | if granted | yes |
 | Record a payment | as the one paid | any |
 | Delete a payment | – | yes |
-| Print windows, users and invites | – | yes |
+| Print windows, users and invites, stored files | – | yes |
 
 ## Permissions
 

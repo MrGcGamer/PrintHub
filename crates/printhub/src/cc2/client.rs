@@ -29,7 +29,6 @@ use super::{
     status::{StatusCache, deep_merge},
 };
 
-pub const MQTT_PORT: u16 = 1883;
 pub const MQTT_USERNAME: &str = "elegoo";
 
 /// Protocol timings. Tests shorten them; production uses [`Timing::default`].
@@ -75,12 +74,13 @@ pub struct ClientConfig {
     pub timing: Timing,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", content = "detail", rename_all = "snake_case")]
 pub enum LinkState {
     /// Set by the server while it looks for the printer's serial number; the client itself
     /// never reports it.
     Discovering(String),
+    #[default]
     Connecting,
     /// Connected at the MQTT level, but the printer refused registration, e.g. `too many clients`.
     Rejected(String),
@@ -90,7 +90,7 @@ pub enum LinkState {
 
 /// Last known printer state. Fields keep their last value across disconnects; `link` says how
 /// stale they may be.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct PrinterSnapshot {
     pub link: LinkState,
     pub status: Option<StatusView>,
@@ -148,13 +148,7 @@ impl PrinterClient {
         options.set_max_packet_size(MAX_INCOMING_PACKET, MAX_OUTGOING_PACKET);
         let (mqtt, eventloop) = AsyncClient::new(options, 64);
 
-        let (snapshot, _) = watch::channel(PrinterSnapshot {
-            link: LinkState::Connecting,
-            status: None,
-            canvas: None,
-            attributes: None,
-            last_seen: None,
-        });
+        let (snapshot, _) = watch::channel(PrinterSnapshot::default());
         let inner = Arc::new(Inner {
             topics: Topics::new(&config.serial, &client_id, &request_id),
             mqtt,
@@ -240,6 +234,14 @@ impl PrinterClient {
             methods::TaskPage { page: 1, page_size },
         )
         .await
+    }
+
+    /// Removes a file from the printer's own storage. The protocol doc gives the parameters but
+    /// marks the method untested.
+    pub async fn delete_file(&self, filename: &str) -> Result<(), CommandError> {
+        self.request(methods::DELETE_FILE, FileRef::local(filename))
+            .await
+            .map(drop)
     }
 
     pub async fn start_print(
@@ -647,7 +649,7 @@ impl Inner {
                 return false;
             }
             if s.link == LinkState::Registered {
-                s.last_seen = Some(unix_seconds());
+                s.last_seen = Some(jiff::Timestamp::now().as_second());
             }
             s.link = link;
             true
@@ -662,10 +664,6 @@ impl Inner {
         self.register_waiter.lock().unwrap().take();
         self.set_link(LinkState::Disconnected(reason));
     }
-}
-
-fn unix_seconds() -> i64 {
-    (unix_millis() / 1000) as i64
 }
 
 fn unix_millis() -> u128 {

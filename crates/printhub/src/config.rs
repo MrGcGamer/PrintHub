@@ -81,7 +81,8 @@ pub struct Config {
     pub orca_slicer: PathBuf,
     /// OrcaSlicer's `resources/profiles/Elegoo` directory.
     pub orca_profiles: PathBuf,
-    /// Schedule rules are wall-clock times in this zone.
+    /// Schedule rules are wall-clock times in this zone. Without `TZ` it is the system's zone,
+    /// the same one jiff's `TimeZone::system()` gives the pages that format times.
     pub timezone: TimeZone,
 }
 
@@ -197,7 +198,7 @@ impl Config {
             ),
             timezone: env.parse(
                 "TZ",
-                TimeZone::UTC,
+                TimeZone::system(),
                 "an IANA time zone like Europe/Berlin",
                 |raw| TimeZone::get(raw).ok(),
             )?,
@@ -321,7 +322,7 @@ mod tests {
         assert_eq!(config.max_upload_bytes, 200 * 1024 * 1024);
         assert_eq!(config.slice_timeout, Duration::from_secs(900));
         assert_eq!(config.estimate_margin, 1.15);
-        assert_eq!(config.timezone, TimeZone::UTC);
+        assert_eq!(config.timezone, TimeZone::system());
     }
 
     #[test]

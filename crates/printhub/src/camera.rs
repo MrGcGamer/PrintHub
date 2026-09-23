@@ -130,25 +130,39 @@ pub fn is_jpeg(frame: &[u8]) -> bool {
     frame.starts_with(&[0xFF, 0xD8])
 }
 
+/// Connects to the camera and checks that it answers with an MJPEG stream.
+async fn open(
+    http: &reqwest::Client,
+    url: &str,
+) -> Result<
+    (
+        MjpegParser,
+        impl futures::Stream<Item = reqwest::Result<Bytes>> + use<>,
+    ),
+    CameraError,
+> {
+    let response = http.get(url).send().await?;
+    if !response.status().is_success() {
+        return Err(CameraError::Status(response.status()));
+    }
+    let content_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    let parser =
+        MjpegParser::from_content_type(&content_type).ok_or(CameraError::NotMjpeg(content_type))?;
+    Ok((parser, response.bytes_stream()))
+}
+
 pub async fn grab_frame(
     http: &reqwest::Client,
     url: &str,
     limit: Duration,
 ) -> Result<Bytes, CameraError> {
     let grab = async {
-        let response = http.get(url).send().await?;
-        if !response.status().is_success() {
-            return Err(CameraError::Status(response.status()));
-        }
-        let content_type = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or_default()
-            .to_owned();
-        let mut parser = MjpegParser::from_content_type(&content_type)
-            .ok_or(CameraError::NotMjpeg(content_type))?;
-        let mut stream = response.bytes_stream();
+        let (mut parser, mut stream) = open(http, url).await?;
         while let Some(chunk) = stream.next().await {
             if let Some(frame) = parser.push(&chunk?).into_iter().next() {
                 return Ok(frame);
@@ -342,19 +356,7 @@ impl HubInner {
 
     /// Streams until retired (`Ok`) or until the connection fails.
     async fn stream_frames(&self, idle_since: &mut Option<Instant>) -> Result<(), CameraError> {
-        let response = self.http.get(&self.url).send().await?;
-        if !response.status().is_success() {
-            return Err(CameraError::Status(response.status()));
-        }
-        let content_type = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or_default()
-            .to_owned();
-        let mut parser = MjpegParser::from_content_type(&content_type)
-            .ok_or(CameraError::NotMjpeg(content_type))?;
-        let mut stream = response.bytes_stream();
+        let (mut parser, mut stream) = open(&self.http, &self.url).await?;
         let mut check = interval(Duration::from_millis(500));
         let mut deadline = Instant::now() + self.stall_timeout;
         loop {

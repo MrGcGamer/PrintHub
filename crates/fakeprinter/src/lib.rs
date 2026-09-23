@@ -201,6 +201,21 @@ impl FakePrinter {
         self.shared.state.lock().unwrap().uploads.clone()
     }
 
+    /// Names of the files in the printer's local storage, sorted.
+    pub fn files(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .shared
+            .state
+            .lock()
+            .unwrap()
+            .files
+            .keys()
+            .cloned()
+            .collect();
+        names.sort();
+        names
+    }
+
     /// `params` of every accepted `START_PRINT`.
     pub fn started_prints(&self) -> Vec<Value> {
         self.shared.state.lock().unwrap().started.clone()
@@ -539,6 +554,11 @@ impl Shared {
                     }),
                     None,
                 ),
+                None => (json!({"error_code": 1021}), None),
+            },
+            // The protocol doc gives only the parameters; the not-found code is 1046's.
+            1047 => match state.files.remove(&filename) {
+                Some(_) => (json!({"error_code": 0}), None),
                 None => (json!({"error_code": 1021}), None),
             },
             1020 => {

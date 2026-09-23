@@ -182,6 +182,10 @@ pub struct SliceSettings {
 pub struct Slicer {
     binary: PathBuf,
     library: ProfileLibrary,
+    /// Processes and filaments per nozzle, in [`Nozzle::ALL`] order. Listing them flattens
+    /// every profile, 15 ms in a release build on the development Mac: too slow to repeat per
+    /// page on the Pi.
+    choices: Vec<(Vec<String>, Vec<String>)>,
     timeout: Duration,
     /// One slice at a time: the CLI uses every core.
     running: Semaphore,
@@ -190,20 +194,40 @@ pub struct Slicer {
 impl Slicer {
     /// Holds every nozzle's profiles: the mounted nozzle can change while the server runs.
     pub fn new(binary: PathBuf, vendor_dir: &Path, timeout: Duration) -> Result<Self, SliceError> {
+        let library = ProfileLibrary::load(vendor_dir)?;
+        let choices = Nozzle::ALL
+            .into_iter()
+            .map(|nozzle| {
+                let machine = machine_name(nozzle);
+                (
+                    library.compatible("process", &machine),
+                    library.compatible("filament", &machine),
+                )
+            })
+            .collect();
         Ok(Self {
             binary,
-            library: ProfileLibrary::load(vendor_dir)?,
+            library,
+            choices,
             timeout,
             running: Semaphore::new(1),
         })
     }
 
-    pub fn processes(&self, nozzle: Nozzle) -> Vec<String> {
-        self.library.compatible("process", &machine_name(nozzle))
+    pub fn processes(&self, nozzle: Nozzle) -> &[String] {
+        &self.choices_for(nozzle).0
     }
 
-    pub fn filaments(&self, nozzle: Nozzle) -> Vec<String> {
-        self.library.compatible("filament", &machine_name(nozzle))
+    pub fn filaments(&self, nozzle: Nozzle) -> &[String] {
+        &self.choices_for(nozzle).1
+    }
+
+    fn choices_for(&self, nozzle: Nozzle) -> &(Vec<String>, Vec<String>) {
+        let index = Nozzle::ALL
+            .iter()
+            .position(|n| *n == nozzle)
+            .expect("ALL holds every nozzle");
+        &self.choices[index]
     }
 
     /// Slices `model` inside `workdir`, which must exist, and returns the G-code's path.

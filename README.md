@@ -63,7 +63,7 @@ its own screen — it allows few simultaneous clients.
 | `PRINTER_CAMERA_PORT` | `8080` | |
 | `LISTEN_ADDR` | `0.0.0.0:8080` | The address PrintHub itself serves on |
 | `DATA_DIR` | `/data` | Database, uploads and sliced files |
-| `TZ` | `UTC` | IANA zone the print schedule is written in |
+| `TZ` | the system's zone | IANA zone the print schedule and every shown time are in |
 | `ADMIN_USERNAME`, `ADMIN_PASSWORD` | unset | Creates the first admin; ignored once one exists |
 | `TRUST_PROXY` | `false` | Honour `X-Forwarded-Proto` and `X-Forwarded-Host` |
 | `CAMERA_ENABLED` | `true` | |

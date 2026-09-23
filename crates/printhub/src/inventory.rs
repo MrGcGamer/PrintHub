@@ -267,52 +267,56 @@ pub async fn weigh_in(
     )
     .execute(&mut *tx)
     .await?;
-    let used = before.remaining_grams - remaining_grams;
-    let kind = ConsumptionKind::WeighIn.as_str();
-    sqlx::query!(
-        "INSERT INTO consumption (spool_id, user_id, kind, grams, note, created_at,
-                                  spool_owner_id, value_cents)
-         SELECT s.id, ?, ?, ?, '', ?, s.owner_id,
-                CASE WHEN s.price_cents IS NOT NULL AND s.initial_grams > 0
-                     THEN ? * s.price_cents / s.initial_grams END
-         FROM spools s WHERE s.id = ?",
-        user_id,
-        kind,
-        used,
-        now,
-        used,
+    let entry = Entry {
         spool_id,
-    )
-    .execute(&mut *tx)
-    .await?;
+        user_id: Some(user_id),
+        job_id: None,
+        kind: ConsumptionKind::WeighIn,
+        grams: before.remaining_grams - remaining_grams,
+        note: "",
+        now,
+    };
+    insert_entry(&mut tx, &entry).await?;
     tx.commit().await?;
     Ok(())
 }
 
-/// Deducts what a print used, as a ledger entry tied to the job. The entry keeps the spool's
-/// current owner and the filament's value, which later edits to the spool leave alone.
-#[allow(clippy::too_many_arguments)]
+/// One ledger row: `grams` taken from the spool, negative when a weigh-in found more.
+pub struct Entry<'a> {
+    pub spool_id: i64,
+    pub user_id: Option<i64>,
+    pub job_id: Option<i64>,
+    pub kind: ConsumptionKind,
+    pub grams: f64,
+    pub note: &'a str,
+    pub now: i64,
+}
+
+/// Deducts what a print used, together with its ledger entry.
 pub async fn record_use(
     conn: &mut sqlx::SqliteConnection,
-    spool_id: i64,
-    user_id: Option<i64>,
-    job_id: i64,
-    kind: ConsumptionKind,
-    grams: f64,
-    note: &str,
-    now: i64,
+    entry: &Entry<'_>,
 ) -> Result<(), InventoryError> {
     let updated = sqlx::query!(
         "UPDATE spools SET remaining_grams = remaining_grams - ? WHERE id = ?",
-        grams,
-        spool_id,
+        entry.grams,
+        entry.spool_id,
     )
     .execute(&mut *conn)
     .await?;
     if updated.rows_affected() == 0 {
         return Err(InventoryError::NotFound);
     }
-    let kind = kind.as_str();
+    insert_entry(conn, entry).await
+}
+
+/// The row keeps the spool's current owner and the filament's value, which later edits to the
+/// spool leave alone.
+async fn insert_entry(
+    conn: &mut sqlx::SqliteConnection,
+    entry: &Entry<'_>,
+) -> Result<(), InventoryError> {
+    let kind = entry.kind.as_str();
     sqlx::query!(
         "INSERT INTO consumption (spool_id, user_id, job_id, kind, grams, note, created_at,
                                   spool_owner_id, value_cents)
@@ -320,14 +324,14 @@ pub async fn record_use(
                 CASE WHEN s.price_cents IS NOT NULL AND s.initial_grams > 0
                      THEN ? * s.price_cents / s.initial_grams END
          FROM spools s WHERE s.id = ?",
-        user_id,
-        job_id,
+        entry.user_id,
+        entry.job_id,
         kind,
-        grams,
-        note,
-        now,
-        grams,
-        spool_id,
+        entry.grams,
+        entry.note,
+        entry.now,
+        entry.grams,
+        entry.spool_id,
     )
     .execute(&mut *conn)
     .await?;

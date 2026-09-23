@@ -11,17 +11,18 @@ use fakeprinter::{FakePrinter, Options};
 use futures::StreamExt;
 use printhub::{
     accounts::{self, Role},
+    app::{self, AppState},
     auth,
     camera::{self, CameraHub},
     cc2::{ClientConfig, PrinterClient, Timing},
     config::Config,
-    dispatcher, gcode, inventory,
+    gcode, inventory,
     jobs::{self, JobState},
     printer::PrinterLink,
     schedule,
     slicer::Slicer,
     store::{self, Db},
-    web::{self, AppState},
+    web,
 };
 use reqwest::{
     StatusCode,
@@ -89,7 +90,7 @@ async fn app_with(slicer: Option<Slicer>) -> App {
 
     let camera = CameraHub::new(
         reqwest::Client::new(),
-        web::camera_url(&config),
+        app::camera_url(&config),
         Duration::from_millis(300),
         camera::STALL_TIMEOUT,
     );
@@ -97,8 +98,7 @@ async fn app_with(slicer: Option<Slicer>) -> App {
     let state = AppState::new(db.clone(), config, link, Some(camera), slicer)
         .await
         .unwrap();
-    tokio::spawn(web::unbind_emptied_trays(state.clone()));
-    tokio::spawn(dispatcher::run(state.clone()));
+    app::spawn_tasks(&state);
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -964,6 +964,13 @@ async fn gcode_job_prints_from_its_spool_and_deducts_filament() {
         .unwrap()
         .remaining_grams;
     assert!((left - (1000.0 - 3.54)).abs() < 1e-9, "{left}");
+    timeout(WAIT, async {
+        while !app.printer.files().is_empty() {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("the ended print's file is removed from the printer");
 }
 
 /// A stand-in OrcaSlicer that copies the cube fixture to `--outputdir` and keeps the process and
@@ -1426,7 +1433,6 @@ async fn statistics_show_whose_filament_was_used_and_what_is_owed() {
     .await
     .unwrap();
     let info = gcode::GcodeInfo {
-        generator: String::new(),
         printer_model: String::new(),
         nozzle: String::new(),
         plate: String::new(),
@@ -1437,7 +1443,6 @@ async fn statistics_show_whose_filament_was_used_and_what_is_owed() {
             material: "PLA".into(),
             color: "#2850DF".into(),
             grams: 100.0,
-            profile: String::new(),
         }],
     };
     jobs::store_gcode_info(&app.db, job, &info, Some(spool))
@@ -1697,4 +1702,72 @@ async fn controlling_another_member_s_print_needs_the_permission() {
         .await
         .unwrap();
     assert!(users.contains("Pause or stop any print"), "{users}");
+}
+
+#[tokio::test]
+async fn admins_see_and_delete_what_jobs_keep_on_disk() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    let sam = app.member("sam").await;
+    assert_eq!(
+        app.get("/admin/storage", Some(&sam)).await.status(),
+        StatusCode::FORBIDDEN
+    );
+
+    let gcode = std::fs::read(CUBE_GCODE).unwrap();
+    let uploaded = app.upload(&admin, &[], "cube.gcode", &gcode).await;
+    let job_path = uploaded.headers()[LOCATION].to_str().unwrap().to_owned();
+    let job_id: i64 = id_of(&job_path).parse().unwrap();
+    let delete = format!("/admin/storage/{job_id}/delete");
+    let file = format!("{job_path}/files/job.gcode");
+
+    let page = app
+        .get("/admin/storage", Some(&admin))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(
+        page.contains(&format!(r#"<a href="/jobs/{job_id}">cube.gcode</a>"#)),
+        "{page}"
+    );
+    assert!(
+        !page.contains(&delete),
+        "a job waiting to be confirmed keeps its files"
+    );
+    let refused = app.post(&delete, Some(&admin), &[]).await;
+    assert_eq!(refused.headers()[LOCATION], "/admin/storage?problem=active");
+    assert_eq!(app.get(&file, Some(&admin)).await.status(), StatusCode::OK);
+    assert_eq!(
+        app.post(&delete, Some(&sam), &[]).await.status(),
+        StatusCode::FORBIDDEN
+    );
+
+    app.post(&format!("{job_path}/cancel"), Some(&admin), &[])
+        .await;
+    let page = app
+        .get("/admin/storage", Some(&admin))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(page.contains(&delete), "{page}");
+    let deleted = app.post(&delete, Some(&admin), &[]).await;
+    assert_eq!(deleted.headers()[LOCATION], "/admin/storage?done=deleted");
+    assert_eq!(
+        app.get(&file, Some(&admin)).await.status(),
+        StatusCode::NOT_FOUND
+    );
+    let page = app
+        .get("/admin/storage", Some(&admin))
+        .await
+        .text()
+        .await
+        .unwrap();
+    assert!(page.contains("No job has files on disk."), "{page}");
+    assert_eq!(
+        jobs::get(&app.db, job_id).await.unwrap().unwrap().state,
+        JobState::Cancelled,
+        "the job itself stays"
+    );
 }

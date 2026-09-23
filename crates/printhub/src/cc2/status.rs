@@ -105,10 +105,6 @@ impl StatusCache {
         self.has_full_frame
     }
 
-    pub fn raw(&self) -> &Value {
-        &self.raw
-    }
-
     pub fn view(&self) -> Result<StatusView, serde_json::Error> {
         StatusView::deserialize(&self.raw)
     }

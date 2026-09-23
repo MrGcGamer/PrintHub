@@ -3,6 +3,7 @@
 
 use std::{
     collections::HashMap,
+    io,
     path::{Path, PathBuf},
 };
 
@@ -10,6 +11,7 @@ use jiff::{SignedDuration, Timestamp, tz::TimeZone};
 use thiserror::Error;
 
 use crate::{
+    accounts::User,
     cc2::{
         LinkState, PrinterSnapshot,
         methods::SlotMapEntry,
@@ -141,6 +143,25 @@ impl Job {
         self.owner.as_ref().map(|(id, _)| *id)
     }
 
+    /// Owners and admins confirm, cancel and retry a job.
+    pub fn managed_by(&self, user: &User) -> bool {
+        user.is_admin() || self.owner_id() == Some(user.id)
+    }
+
+    /// `control_any` is whether `user` holds [`Permission::ControlPrint`], which also opens
+    /// stopping somebody else's running print. An upload cannot be interrupted.
+    ///
+    /// [`Permission::ControlPrint`]: crate::accounts::Permission::ControlPrint
+    pub fn cancellable_by(&self, user: &User, control_any: bool) -> bool {
+        let permitted = self.managed_by(user) || (self.state == JobState::Printing && control_any);
+        permitted && !self.state.is_finished() && self.state != JobState::Uploading
+    }
+
+    /// Only a failed job whose G-code and filament list are still there can be queued again.
+    pub fn retryable_by(&self, user: &User, tools: &[JobTool], has_gcode: bool) -> bool {
+        self.managed_by(user) && self.state == JobState::Failed && has_gcode && !tools.is_empty()
+    }
+
     /// Plain ASCII: the upload sends it in an HTTP header. The id suffix keeps it unique, and
     /// the dispatcher recognises its own print by comparing the printer's reported name against
     /// this exact string.
@@ -197,6 +218,66 @@ pub fn model_path(data_dir: &Path, id: i64) -> PathBuf {
 
 pub fn gcode_path(data_dir: &Path, id: i64) -> PathBuf {
     dir(data_dir, id).join("job.gcode")
+}
+
+pub fn preview_path(data_dir: &Path, id: i64) -> PathBuf {
+    dir(data_dir, id).join("preview.png")
+}
+
+/// Every job directory on disk, as `(job id, bytes)`, in no particular order. A directory
+/// whose name is not a job id is left out; one whose job no longer exists is not.
+pub async fn stored(data_dir: &Path) -> io::Result<Vec<(i64, u64)>> {
+    let mut entries = match tokio::fs::read_dir(data_dir.join("jobs")).await {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(err) => return Err(err),
+    };
+    let mut found = Vec::new();
+    while let Some(entry) = entries.next_entry().await? {
+        if let Some(id) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse().ok())
+        {
+            found.push((id, disk_usage(entry.path()).await?));
+        }
+    }
+    Ok(found)
+}
+
+/// Files that vanish while they are counted, like a slice's scratch files, count as nothing.
+async fn disk_usage(root: PathBuf) -> io::Result<u64> {
+    let mut total = 0;
+    let mut pending = vec![root];
+    while let Some(path) = pending.pop() {
+        let meta = match tokio::fs::symlink_metadata(&path).await {
+            Ok(meta) => meta,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err),
+        };
+        if !meta.is_dir() {
+            total += meta.len();
+            continue;
+        }
+        let mut entries = match tokio::fs::read_dir(&path).await {
+            Ok(entries) => entries,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err),
+        };
+        while let Some(entry) = entries.next_entry().await? {
+            pending.push(entry.path());
+        }
+    }
+    Ok(total)
+}
+
+/// Deletes the model, the G-code and the preview. The job itself stays, for the history and the
+/// statistics.
+pub async fn remove_files(data_dir: &Path, id: i64) -> io::Result<()> {
+    match tokio::fs::remove_dir_all(dir(data_dir, id)).await {
+        Err(err) if err.kind() != io::ErrorKind::NotFound => Err(err),
+        _ => Ok(()),
+    }
 }
 
 pub struct NewJob<'a> {
@@ -622,17 +703,16 @@ pub async fn finish(
         if grams <= 0.0 {
             continue;
         }
-        inventory::record_use(
-            &mut tx,
+        let entry = inventory::Entry {
             spool_id,
-            job.owner_id(),
-            job.id,
+            user_id: job.owner_id(),
+            job_id: Some(job.id),
             kind,
             grams,
-            &job.name,
+            note: &job.name,
             now,
-        )
-        .await?;
+        };
+        inventory::record_use(&mut tx, &entry).await?;
     }
     sqlx::query!(
         "UPDATE jobs SET progress = ? WHERE id = ?",
@@ -1120,7 +1200,6 @@ mod tests {
 
     fn info(grams: &[f64]) -> GcodeInfo {
         GcodeInfo {
-            generator: String::new(),
             printer_model: String::new(),
             nozzle: String::new(),
             plate: String::new(),
@@ -1134,7 +1213,6 @@ mod tests {
                     material: "PLA".into(),
                     color: "#000000".into(),
                     grams: *grams,
-                    profile: String::new(),
                 })
                 .collect(),
         }
@@ -1477,6 +1555,53 @@ mod tests {
             .describe(&tz),
             "Tray A3 for filament 4 is empty."
         );
+    }
+
+    #[test]
+    fn cancelling_and_retrying_follow_ownership_and_state() {
+        let user = |id, role| User {
+            id,
+            username: String::new(),
+            role,
+            disabled: false,
+            created_at: 0,
+            theme: accounts::Theme::default(),
+        };
+        let (owner, other, admin) = (
+            user(5, Role::Member),
+            user(6, Role::Member),
+            user(7, Role::Admin),
+        );
+        let in_state = |state| Job {
+            owner: Some((5, "sam".into())),
+            state,
+            ..job(None)
+        };
+        let tools = [tool(0, 5.0, Some(1))];
+
+        let queued = in_state(JobState::Queued);
+        assert!(queued.cancellable_by(&owner, false) && queued.cancellable_by(&admin, false));
+        assert!(
+            !queued.cancellable_by(&other, true),
+            "ControlPrint only reaches running prints"
+        );
+        let printing = in_state(JobState::Printing);
+        assert!(printing.cancellable_by(&other, true) && !printing.cancellable_by(&other, false));
+        assert!(!in_state(JobState::Uploading).cancellable_by(&admin, true));
+        assert!(!in_state(JobState::Done).cancellable_by(&admin, true));
+
+        let failed = in_state(JobState::Failed);
+        assert!(failed.retryable_by(&owner, &tools, true));
+        assert!(!failed.retryable_by(&other, &tools, true));
+        assert!(
+            !failed.retryable_by(&owner, &tools, false),
+            "the G-code is gone"
+        );
+        assert!(
+            !failed.retryable_by(&owner, &[], true),
+            "it was never sliced"
+        );
+        assert!(!in_state(JobState::Cancelled).retryable_by(&admin, &tools, true));
     }
 
     #[tokio::test]

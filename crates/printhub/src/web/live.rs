@@ -67,7 +67,7 @@ pub async fn printer_events(
                 let snapshot = printer.borrow().clone();
                 let bindings = bindings.borrow().clone();
                 let mounted = nozzle.borrow().clone();
-                let total_layers = super::layer_total(&state, &snapshot).await;
+                let total_layers = state.layer_total(&snapshot).await;
                 let partial = PrinterCardPartial {
                     card: PrinterCard::new(
                         &snapshot,
@@ -102,7 +102,7 @@ pub async fn control(
         || jobs::in_state(&state.db, JobState::Printing)
             .await?
             .iter()
-            .any(|job| job.owner_id() == Some(current.user.id));
+            .any(|job| job.managed_by(&current.user));
     if !allowed {
         return Err(AppError::Forbidden);
     }

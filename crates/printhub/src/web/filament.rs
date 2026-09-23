@@ -640,8 +640,6 @@ pub struct BindForm {
     spool_id: i64,
 }
 
-/// Only a tray with filament can take a spool: an empty tray's binding would be removed again
-/// by the next status update.
 /// Binds `spool_id` into the tray when the printer still reports filament in it. `false`
 /// means it does not, and nothing was written.
 async fn bind_if_loaded(
@@ -664,6 +662,8 @@ async fn bind_if_loaded(
     Ok(true)
 }
 
+/// Only a tray with filament can take a spool: an empty tray's binding would be removed again
+/// by the next status update.
 pub async fn bind_tray(
     State(state): State<AppState>,
     current: CurrentUser,

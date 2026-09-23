@@ -45,7 +45,7 @@ set -a && . ./.env && set +a
 - Run against the emulator: `cargo run -p fakeprinter` prints the `PRINTER_*` variables; export
   them, then `cargo run -p printhub -- serve` (or `probe`, `slice-selftest`).
   `FAKE_PRINT_SECONDS=120` makes every started print heat, advance and finish in that time
-  (also honoured by `./start-local.sh`); without it a print sits at 0% until a test drives it.
+  (`./start-local.sh` defaults it to 120); unset or 0, a print sits at 0% until a test drives it.
 
 Verification is a skill, not ad hoc: `.claude/skills/verify-phase` holds the full chain (fmt,
 clippy with `-D warnings`, sqlx prepare check, tests, offline build), `smoke.sh` for the real
@@ -68,19 +68,23 @@ status when `result.sequence` has a gap. `printer::PrinterLink` keeps retrying d
 the printer is off and publishes a `PrinterSnapshot` on a watch channel. Uploads are plain HTTP
 (`cc2::upload`); the camera is one upstream MJPEG connection fanned out by `camera::CameraHub`.
 
-**Shared state.** `web::AppState` holds the database, config, printer link, camera hub,
+**Shared state.** `app::AppState` holds the database, config, printer link, camera hub,
 optional slicer and uploader, plus watch channels the UI and dispatcher read without queries:
 `bindings` (tray ↔ spool) and `nozzle` (the recorded mounted nozzle). Whoever changes the
 underlying rows must call `refresh_bindings()` / `refresh_nozzle()`. `queue_changed` wakes the
-dispatcher.
+dispatcher. `app::serve` wires everything up; background work goes in `app::spawn_tasks`,
+which the web tests call too. `web` holds only the router and the pages.
 
 **Jobs.** `jobs::transition` is the only way a job changes state, and it applies only if the
 job is still in the expected state, so racing tasks cannot both win. Whether a job may start is
 a pure function, `jobs::check_start` → a `slot_map` or the first `BlockReason` (printer offline,
 another job active, printer busy, nozzle mismatch, bed not clear, spools, schedule, in that
-order), fed by `dispatcher::Readiness`, which
-the job pages reuse to show why a job waits. `dispatcher` uploads as `printhub-<id>.gcode`,
-starts it with the `slot_map`, and follows the print by that filename and its sub-status.
+order), fed by `dispatcher::Readiness`, which the job pages reuse to show why a job waits.
+Who may cancel or retry a job is decided by `Job::cancellable_by` and `Job::retryable_by` for
+every page and handler. `dispatcher` uploads as `Job::printer_filename` (`<name>-<id>.gcode`),
+starts it with the `slot_map`, follows the print by that filename and its sub-status, and
+deletes the file from the printer once the print ends. PrintHub's own copies under
+`DATA_DIR/jobs/<id>/` stay until an admin deletes them on the Storage page.
 `remaining_grams` on a spool only changes together with a `consumption` row, in one
 transaction.
 

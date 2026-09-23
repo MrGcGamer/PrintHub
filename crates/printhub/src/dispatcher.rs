@@ -7,6 +7,7 @@ use jiff::Timestamp;
 use thiserror::Error;
 
 use crate::{
+    app::{AppState, FileLayers},
     cc2::{
         CommandError, LinkState, PrinterSnapshot,
         methods::{SlotMapEntry, error_code},
@@ -21,7 +22,6 @@ use crate::{
     schedule::{self, Rule},
     slicer::SliceSettings,
     store,
-    web::{AppState, FileLayers},
 };
 
 const TICK: Duration = Duration::from_secs(30);
@@ -307,6 +307,7 @@ async fn follow(
             // Whatever the outcome, something is on the bed until somebody says otherwise.
             jobs::set_bed_clear(&state.db, false, None, now).await?;
             seen_printing.remove(&job.id);
+            remove_upload(state, job).await;
             tracing::info!(
                 job = job.id,
                 outcome = outcome.as_str(),
@@ -318,6 +319,18 @@ async fn follow(
         _ => {}
     }
     Ok(())
+}
+
+/// The printer keeps every upload until something deletes it. A retry uploads the file again, so
+/// nothing needs it once the print has ended, and a failure here only leaves it behind.
+async fn remove_upload(state: &AppState, job: &Job) {
+    let Some(client) = state.printer.client() else {
+        return;
+    };
+    let filename = job.printer_filename();
+    if let Err(err) = client.delete_file(&filename).await {
+        tracing::warn!(job = job.id, filename, %err, "removing the file from the printer failed");
+    }
 }
 
 #[derive(Debug, Error)]

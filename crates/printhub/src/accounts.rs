@@ -181,26 +181,30 @@ pub fn validate_password(password: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn user_from(
+struct UserRow {
     id: i64,
     username: String,
-    role: &str,
+    role: String,
     disabled: i64,
     created_at: i64,
-    theme: &str,
-) -> User {
-    User {
-        id,
-        username,
-        // The CHECK constraints admit only the values `Role::parse` and `Theme::parse` know.
-        role: Role::parse(role).unwrap_or(Role::Member),
-        disabled: disabled != 0,
-        created_at,
-        theme: Theme::parse(theme).unwrap_or_default(),
+    theme: String,
+}
+
+impl From<UserRow> for User {
+    fn from(row: UserRow) -> Self {
+        Self {
+            id: row.id,
+            username: row.username,
+            // The CHECK constraints admit only the values `Role::parse` and `Theme::parse` know.
+            role: Role::parse(&row.role).unwrap_or(Role::Member),
+            disabled: row.disabled != 0,
+            created_at: row.created_at,
+            theme: Theme::parse(&row.theme).unwrap_or_default(),
+        }
     }
 }
 
-pub async fn active_admin_count(db: &Db) -> Result<i64, AccountError> {
+pub async fn active_admin_count(db: impl sqlx::SqliteExecutor<'_>) -> Result<i64, AccountError> {
     let row = sqlx::query!(
         r#"SELECT COUNT(*) AS "count!: i64" FROM users WHERE role = 'admin' AND disabled = 0"#
     )
@@ -246,59 +250,41 @@ pub async fn login_record(db: &Db, username: &str) -> Result<Option<(User, Strin
     .fetch_optional(db)
     .await?;
     Ok(row.map(|r| {
-        (
-            user_from(
-                r.id,
-                r.username,
-                &r.role,
-                r.disabled,
-                r.created_at,
-                &r.theme,
-            ),
-            r.password_hash,
-        )
+        let user = UserRow {
+            id: r.id,
+            username: r.username,
+            role: r.role,
+            disabled: r.disabled,
+            created_at: r.created_at,
+            theme: r.theme,
+        };
+        (user.into(), r.password_hash)
     }))
 }
 
-pub async fn user(db: &Db, id: i64) -> Result<Option<User>, AccountError> {
-    let row = sqlx::query!(
+pub async fn user(
+    db: impl sqlx::SqliteExecutor<'_>,
+    id: i64,
+) -> Result<Option<User>, AccountError> {
+    let row = sqlx::query_as!(
+        UserRow,
         r#"SELECT id AS "id!", username, role, disabled, created_at, theme FROM users WHERE id = ?"#,
         id,
     )
     .fetch_optional(db)
     .await?;
-    Ok(row.map(|r| {
-        user_from(
-            r.id,
-            r.username,
-            &r.role,
-            r.disabled,
-            r.created_at,
-            &r.theme,
-        )
-    }))
+    Ok(row.map(User::from))
 }
 
 pub async fn users(db: &Db) -> Result<Vec<User>, AccountError> {
-    let rows = sqlx::query!(
+    let rows = sqlx::query_as!(
+        UserRow,
         r#"SELECT id AS "id!", username, role, disabled, created_at, theme
            FROM users ORDER BY username COLLATE NOCASE"#
     )
     .fetch_all(db)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(|r| {
-            user_from(
-                r.id,
-                r.username,
-                &r.role,
-                r.disabled,
-                r.created_at,
-                &r.theme,
-            )
-        })
-        .collect())
+    Ok(rows.into_iter().map(User::from).collect())
 }
 
 pub async fn has_permission(
@@ -378,7 +364,7 @@ pub async fn set_permissions(
 /// Roles only go up: an admin is never made a member again.
 pub async fn set_role(db: &Db, id: i64, role: Role) -> Result<(), AccountError> {
     let mut tx = db.begin().await?;
-    let target = target_for_admin_change(&mut tx, id).await?;
+    let target = user(&mut *tx, id).await?.ok_or(AccountError::NotFound)?;
     if target.is_admin() && role != Role::Admin {
         return Err(AccountError::AdminStaysAdmin);
     }
@@ -392,7 +378,7 @@ pub async fn set_role(db: &Db, id: i64, role: Role) -> Result<(), AccountError> 
 
 pub async fn set_disabled(db: &Db, id: i64, disabled: bool) -> Result<(), AccountError> {
     let mut tx = db.begin().await?;
-    let target = target_for_admin_change(&mut tx, id).await?;
+    let target = user(&mut *tx, id).await?.ok_or(AccountError::NotFound)?;
     if disabled && target.is_admin() && !target.disabled {
         ensure_other_admin(&mut tx).await?;
     }
@@ -409,34 +395,8 @@ pub async fn set_disabled(db: &Db, id: i64, disabled: bool) -> Result<(), Accoun
     Ok(())
 }
 
-async fn target_for_admin_change(
-    tx: &mut sqlx::SqliteConnection,
-    id: i64,
-) -> Result<User, AccountError> {
-    let row = sqlx::query!(
-        r#"SELECT id AS "id!", username, role, disabled, created_at, theme FROM users WHERE id = ?"#,
-        id,
-    )
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(AccountError::NotFound)?;
-    Ok(user_from(
-        row.id,
-        row.username,
-        &row.role,
-        row.disabled,
-        row.created_at,
-        &row.theme,
-    ))
-}
-
 async fn ensure_other_admin(tx: &mut sqlx::SqliteConnection) -> Result<(), AccountError> {
-    let row = sqlx::query!(
-        r#"SELECT COUNT(*) AS "count!: i64" FROM users WHERE role = 'admin' AND disabled = 0"#
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    if row.count <= 1 {
+    if active_admin_count(&mut *tx).await? <= 1 {
         return Err(AccountError::LastAdmin);
     }
     Ok(())
@@ -504,7 +464,8 @@ pub async fn session_user(
     token_hash: &[u8],
     now: i64,
 ) -> Result<Option<User>, AccountError> {
-    let row = sqlx::query!(
+    let row = sqlx::query_as!(
+        UserRow,
         r#"SELECT u.id AS "id!", u.username, u.role, u.disabled, u.created_at, u.theme
            FROM sessions s JOIN users u ON u.id = s.user_id
            WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0"#,
@@ -513,16 +474,7 @@ pub async fn session_user(
     )
     .fetch_optional(db)
     .await?;
-    Ok(row.map(|r| {
-        user_from(
-            r.id,
-            r.username,
-            &r.role,
-            r.disabled,
-            r.created_at,
-            &r.theme,
-        )
-    }))
+    Ok(row.map(User::from))
 }
 
 pub async fn delete_session(db: &Db, token_hash: &[u8]) -> Result<(), AccountError> {

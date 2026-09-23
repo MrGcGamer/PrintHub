@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block nav_storage %} aria-current="page"{% endblock %}
+{% block title %}Storage · PrintHub{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Storage</h1>
+  {% if let Some(notice) = notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+  {% if let Some(error) = error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <p class="muted">Uploaded models, sliced G-code and previews take {{ total }}, largest first. Deleting a job's files keeps the job in the history and the statistics, but it can no longer be downloaded or retried.</p>
+  {% if rows.is_empty() %}
+  <p class="muted">No job has files on disk.</p>
+  {% else %}
+  <table class="rows">
+    <thead><tr><th><span class="visually-hidden">Preview</span></th><th>Job</th><th>Owner</th><th>State</th><th>Uploaded</th><th class="num">Age</th><th class="num">Size</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="preview">{% if row.preview %}<img src="/jobs/{{ row.id }}/files/preview.png" alt="" width="48" height="48" loading="lazy">{% endif %}</td>
+        <td>{% if let Some(name) = row.name %}<a href="/jobs/{{ row.id }}">{{ name }}</a>{% else %}<span class="muted">Job {{ row.id }}, no longer recorded</span>{% endif %}</td>
+        <td>{{ row.owner }}</td>
+        <td>{% if !row.state.is_empty() %}<span class="state">{{ row.state }}</span>{% endif %}</td>
+        <td>{{ row.uploaded }}</td>
+        <td class="num">{{ row.age }}</td>
+        <td class="num">{{ row.size }}</td>
+        <td class="actions">{% if row.removable %}<form method="post" action="/admin/storage/{{ row.id }}/delete"><button class="secondary">Delete files</button></form>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

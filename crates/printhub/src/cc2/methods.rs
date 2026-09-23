@@ -12,8 +12,6 @@ pub const RESUME_PRINT: u32 = 1023;
 pub const SET_LIGHT: u32 = 1029;
 pub const PRINT_TASK_LIST: u32 = 1036;
 pub const VIDEO_STREAM: u32 = 1042;
-pub const GET_FILE_LIST: u32 = 1044;
-pub const GET_FILE_THUMBNAIL: u32 = 1045;
 pub const GET_FILE_DETAIL: u32 = 1046;
 pub const DELETE_FILE: u32 = 1047;
 pub const GET_CANVAS_STATUS: u32 = 2005;
@@ -30,8 +28,6 @@ pub const EVENT_ATTRIBUTES: u32 = 6008;
 
 pub mod error_code {
     pub const SUCCESS: i64 = 0;
-    pub const TOKEN_FAILED: i64 = 1000;
-    pub const INVALID_PARAMETER: i64 = 1003;
     pub const PRINTER_BUSY: i64 = 1009;
     pub const NOT_PRINTING: i64 = 1010;
     pub const PRINT_FILE_NOT_FOUND: i64 = 1021;
@@ -86,14 +82,6 @@ impl<'a> FileRef<'a> {
             filename,
         }
     }
-}
-
-#[derive(Debug, Serialize)]
-pub struct FileList<'a> {
-    pub storage_media: &'a str,
-    pub path: &'a str,
-    pub page: u32,
-    pub page_size: u32,
 }
 
 #[derive(Debug, Serialize)]
