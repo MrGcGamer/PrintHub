@@ -26,7 +26,7 @@
   <div class="progress-figures">
     <span class="big">{{ progress }}<span class="unit">%</span></span>
     <span class="aside">
-      {% if let Some(remaining) = card.remaining %}<span class="mid">{{ remaining }}</span> <span class="muted">left{% if let Some(finish) = card.finish %} · done {{ finish }}{% endif %}</span>{% endif %}
+      {% if let Some(remaining) = card.remaining %}<span><span class="mid">{{ remaining }}</span> <span class="muted">left</span></span>{% if let Some(finish) = card.finish %}<span class="muted">done {{ finish }}</span>{% endif %}{% endif %}
       {% if let Some(layers) = card.layers %}<span class="muted">layer {{ layers }}</span>{% endif %}
     </span>
   </div>
