@@ -21,15 +21,25 @@
 {% if let Some(user) = user %}
 <header class="bar">
   <a href="/" class="brand">{% include "logo.html" %}Print<span class="hub">Hub</span></a>
-  <nav>
-    <a href="/jobs">Queue</a>
-    <a href="/inventory">Filament</a>
-    <a href="/stats">Statistics</a>
-    {% if user.is_admin() %}<a href="/admin/schedule">Print windows</a>
-    <a href="/admin/users">Users</a>{% endif %}
-    <a href="/wiki">Help</a>
-    <a href="/account">{{ user.username }}</a>
-    <form method="post" action="/logout"><button class="link">Log out</button></form>
+  <nav aria-label="Main">
+    <div class="nav-group">
+      <a href="/"{% block nav_printer %}{% endblock %}>Printer</a>
+      <a href="/jobs"{% block nav_queue %}{% endblock %}>Queue</a>
+      <a href="/inventory"{% block nav_filament %}{% endblock %}>Filament</a>
+      <a href="/stats"{% block nav_stats %}{% endblock %}>Statistics</a>
+    </div>
+    {% if user.is_admin() %}
+    <div class="nav-group">
+      <span class="nav-heading">Admin</span>
+      <a href="/admin/schedule"{% block nav_schedule %}{% endblock %}>Print windows</a>
+      <a href="/admin/users"{% block nav_users %}{% endblock %}>Users</a>
+    </div>
+    {% endif %}
+    <div class="nav-group account">
+      <a href="/wiki"{% block nav_help %}{% endblock %}>Help</a>
+      <a href="/account"{% block nav_account %}{% endblock %}>{{ user.username }}</a>
+      <form method="post" action="/logout"><button class="link">Log out</button></form>
+    </div>
   </nav>
 </header>
 {% endif %}

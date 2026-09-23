@@ -919,6 +919,13 @@ async fn gcode_job_prints_from_its_spool_and_deducts_filament() {
         queue.contains("Nobody has confirmed that the bed is clear."),
         "{queue}"
     );
+    let dashboard = app.get("/", Some(&admin)).await.text().await.unwrap();
+    assert!(
+        dashboard.contains(&format!(r#"href="/jobs/{job_id}""#)),
+        "the dashboard previews the queue: {dashboard}"
+    );
+    assert!(dashboard.contains(r#"<td class="num position">1</td>"#));
+    assert!(dashboard.contains("</svg>A1 PLA</span>"), "{dashboard}");
     tokio::time::sleep(Duration::from_secs(1)).await;
     assert!(
         app.printer.started_prints().is_empty(),

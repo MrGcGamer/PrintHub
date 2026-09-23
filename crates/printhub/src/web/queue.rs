@@ -72,25 +72,36 @@ pub struct Outcome {
 struct JobsPage {
     user: Option<User>,
     rows: Vec<JobRow>,
+    /// Leaves out previews and actions, as the dashboard does; the shared rows need it.
+    compact: bool,
     bed_clear: bool,
     printer_busy: bool,
     camera_enabled: bool,
     notice: Option<&'static str>,
 }
 
-struct JobRow {
-    id: i64,
-    name: String,
-    owner: String,
-    state: &'static str,
-    detail: String,
-    estimate: String,
+pub(super) struct JobRow {
+    pub(super) id: i64,
+    pub(super) name: String,
+    pub(super) owner: String,
+    pub(super) state: &'static str,
+    pub(super) detail: String,
+    pub(super) estimate: String,
+    /// Place in the queue, counting from 1; only queued jobs have one.
+    pub(super) position: Option<usize>,
+    pub(super) filament: Vec<FilamentChip>,
     /// Whether there is G-code to draw a preview from.
-    preview: bool,
-    printing: bool,
-    can_cancel: bool,
-    can_move: bool,
-    can_requeue: bool,
+    pub(super) preview: bool,
+    pub(super) printing: bool,
+    pub(super) can_cancel: bool,
+    pub(super) can_move: bool,
+    pub(super) can_requeue: bool,
+}
+
+pub(super) struct FilamentChip {
+    /// Always a valid `#RRGGBB`: it is written into an SVG attribute.
+    pub(super) color: String,
+    pub(super) label: String,
 }
 
 pub async fn jobs_page(
@@ -99,45 +110,12 @@ pub async fn jobs_page(
     Query(outcome): Query<Outcome>,
 ) -> Result<Response, AppError> {
     let readiness = Readiness::load(&state).await?;
-    let may_control = may_control_any_print(&state, &current.user).await?;
-    let mut rows = Vec::new();
-    for job in jobs::list(&state.db, RECENT_FINISHED).await? {
-        let detail = match job.state {
-            JobState::Queued => {
-                let tools = jobs::tools(&state.db, job.id).await?;
-                match readiness.check(&state, &job, &tools) {
-                    Ok(_) => "Starting shortly.".to_owned(),
-                    Err(reason) => reason.describe(&state.config.timezone),
-                }
-            }
-            JobState::Printing => format!("{}% done", job.progress),
-            JobState::Failed => job.error.clone(),
-            JobState::Done | JobState::Cancelled => {
-                job.finished_at.map(views::format_time).unwrap_or_default()
-            }
-            _ => String::new(),
-        };
-        let manage = can_manage(&current.user, &job);
-        let printing = job.state == JobState::Printing;
-        rows.push(JobRow {
-            id: job.id,
-            owner: owner_name(&job),
-            state: job.state.label(),
-            estimate: estimate(&job),
-            preview: exists(&jobs::gcode_path(&state.config.data_dir, job.id)).await,
-            printing,
-            can_cancel: (manage || (printing && may_control))
-                && !job.state.is_finished()
-                && job.state != JobState::Uploading,
-            can_move: current.user.is_admin() && job.state == JobState::Queued,
-            can_requeue: manage && job.state == JobState::Failed && job.estimated_seconds.is_some(),
-            detail,
-            name: job.name,
-        });
-    }
+    let jobs = jobs::list(&state.db, RECENT_FINISHED).await?;
+    let rows = job_rows(&state, &current.user, &readiness, jobs).await?;
     let page = JobsPage {
         user: Some(current.user),
         rows,
+        compact: false,
         bed_clear: readiness.bed_clear,
         printer_busy: readiness.printer_busy(),
         camera_enabled: state.camera.is_some(),
@@ -150,6 +128,102 @@ pub async fn jobs_page(
         }),
     };
     Ok(render(&page)?.into_response())
+}
+
+/// Unfinished jobs for the dashboard's preview of the queue, in queue order.
+pub(super) async fn upcoming_rows(
+    state: &AppState,
+    user: &User,
+    limit: usize,
+) -> Result<(Vec<JobRow>, usize), AppError> {
+    let readiness = Readiness::load(state).await?;
+    let mut jobs: Vec<Job> = jobs::list(&state.db, 0)
+        .await?
+        .into_iter()
+        .filter(|job| !job.state.is_finished())
+        .collect();
+    let total = jobs.len();
+    jobs.truncate(limit);
+    Ok((job_rows(state, user, &readiness, jobs).await?, total))
+}
+
+async fn job_rows(
+    state: &AppState,
+    user: &User,
+    readiness: &Readiness,
+    jobs: Vec<Job>,
+) -> Result<Vec<JobRow>, AppError> {
+    let may_control = may_control_any_print(state, user).await?;
+    let bindings = state.bindings.borrow().clone();
+    let spools = inventory::spools(&state.db, true).await?;
+    let spools: HashMap<i64, &Spool> = spools.iter().map(|spool| (spool.id, spool)).collect();
+    let mut queued = 0;
+    let mut rows = Vec::new();
+    for job in jobs {
+        let tools = jobs::tools(&state.db, job.id).await?;
+        let position = (job.state == JobState::Queued).then(|| {
+            queued += 1;
+            queued
+        });
+        let detail = match job.state {
+            JobState::Queued => match readiness.check(state, &job, &tools) {
+                Ok(_) => "Starting shortly.".to_owned(),
+                Err(reason) => reason.describe(&state.config.timezone),
+            },
+            JobState::Printing => format!("{}% done", job.progress),
+            JobState::Failed => job.error.clone(),
+            JobState::Done | JobState::Cancelled => {
+                job.finished_at.map(views::format_time).unwrap_or_default()
+            }
+            _ => String::new(),
+        };
+        let filament = tools
+            .iter()
+            .map(|tool| {
+                let tray = match (tool.canvas_id, tool.tray_id) {
+                    (Some(canvas), Some(tray)) => Some((canvas, tray)),
+                    _ => bindings
+                        .iter()
+                        .find(|binding| Some(binding.spool.id) == tool.spool_id)
+                        .map(|binding| (binding.canvas_id, binding.tray_id)),
+                };
+                // The chosen spool is what will print; the G-code only names what it was sliced for.
+                let (color, material) = match tool.spool_id.and_then(|id| spools.get(&id)) {
+                    Some(spool) => (&spool.color_hex, &spool.material),
+                    None => (&tool.color_hex, &tool.material),
+                };
+                FilamentChip {
+                    color: views::safe_color(color),
+                    label: match tray {
+                        Some((canvas, tray)) => {
+                            format!("{} {material}", views::tray_label(canvas, tray))
+                        }
+                        None => material.clone(),
+                    },
+                }
+            })
+            .collect();
+        let manage = can_manage(user, &job);
+        let printing = job.state == JobState::Printing;
+        rows.push(JobRow {
+            id: job.id,
+            owner: owner_name(&job),
+            state: job.state.label(),
+            estimate: estimate(&job),
+            position,
+            filament,
+            preview: exists(&jobs::gcode_path(&state.config.data_dir, job.id)).await,
+            printing,
+            can_cancel: (manage || (printing && may_control))
+                && !job.state.is_finished()
+                && job.state != JobState::Uploading,
+            can_move: user.is_admin() && job.state == JobState::Queued,
+            can_requeue: manage && job.state == JobState::Failed && job.estimated_seconds.is_some(),
+            detail,
+            name: job.name,
+        });
+    }
+    Ok(rows)
 }
 
 #[derive(Template)]

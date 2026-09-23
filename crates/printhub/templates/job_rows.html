@@ -1,0 +1,26 @@
+<table class="rows">
+  <thead><tr><th class="num">#</th>{% if !compact %}<th><span class="visually-hidden">Preview</span></th>{% endif %}<th>Job</th><th>Owner</th><th>Filament</th><th>State <a class="help" href="/wiki/queue#job-states" aria-label="Help: job states">?</a></th><th class="num">Estimate</th>{% if !compact %}<th><span class="visually-hidden">Actions</span></th>{% endif %}</tr></thead>
+  <tbody>
+    {% for row in rows %}
+    <tr{% if row.printing %} class="current"{% endif %}>
+      <td class="num position">{% if row.printing %}<span aria-hidden="true">▶</span>{% else if let Some(position) = row.position %}{{ position }}{% endif %}</td>
+      {% if !compact %}<td class="preview">{% if row.preview %}<img src="/jobs/{{ row.id }}/files/preview.png" alt="" width="48" height="48" loading="lazy">{% endif %}</td>{% endif %}
+      <td><a href="/jobs/{{ row.id }}">{{ row.name }}</a>{% if !row.detail.is_empty() %}<br><span class="muted">{{ row.detail }}</span>{% if row.state == "Queued" %}<a class="help" href="/wiki/queue/waiting" aria-label="Help: why a job waits">?</a>{% endif %}{% endif %}</td>
+      <td>{{ row.owner }}</td>
+      <td>{% for chip in row.filament %}<span class="chip"><svg class="swatch" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><rect x="0.5" y="0.5" width="11" height="11" rx="3" fill="{{ chip.color }}"/></svg>{{ chip.label }}</span>{% endfor %}</td>
+      <td><span class="state">{{ row.state }}</span></td>
+      <td class="num">{{ row.estimate }}</td>
+      {% if !compact %}
+      <td class="actions"><div class="row-actions">
+        {% if row.can_move %}
+        <form method="post" action="/jobs/{{ row.id }}/move"><input type="hidden" name="direction" value="up"><button class="secondary" aria-label="Move {{ row.name }} earlier">↑</button></form>
+        <form method="post" action="/jobs/{{ row.id }}/move"><input type="hidden" name="direction" value="down"><button class="secondary" aria-label="Move {{ row.name }} later">↓</button></form>
+        {% endif %}
+        {% if row.can_requeue %}<form method="post" action="/jobs/{{ row.id }}/requeue"><button class="secondary">Retry</button></form>{% endif %}
+        {% if row.can_cancel %}<form method="post" action="/jobs/{{ row.id }}/cancel"><button class="secondary">{% if row.printing %}Stop{% else %}Cancel{% endif %}</button></form>{% endif %}
+      </div></td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

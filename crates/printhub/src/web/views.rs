@@ -22,15 +22,26 @@ pub struct PrinterCard {
     pub filename: String,
     pub layers: Option<String>,
     pub remaining: Option<String>,
-    pub nozzle: Option<String>,
+    /// Wall-clock time the print should end, from `remaining`.
+    pub finish: Option<String>,
+    pub nozzle: Option<Temperature>,
     /// The mounted nozzle as people recorded it; the printer does not report it.
     pub nozzle_size: String,
     pub nozzle_note: String,
-    pub bed: Option<String>,
+    pub bed: Option<Temperature>,
     pub trays: Vec<TrayView>,
     pub can_control: bool,
     /// The chamber light, when the printer has reported its state.
     pub light: Option<bool>,
+}
+
+pub struct Temperature {
+    pub current: String,
+    /// Absent while the heater is off.
+    pub target: Option<String>,
+    /// How far towards the target, 0–100; an SVG width, so a plain number.
+    pub percent: i64,
+    pub at_target: bool,
 }
 
 pub struct TrayView {
@@ -97,6 +108,7 @@ impl PrinterCard {
                 filename: String::new(),
                 layers: None,
                 remaining: None,
+                finish: None,
                 nozzle: None,
                 nozzle_size,
                 nozzle_note,
@@ -124,10 +136,12 @@ impl PrinterCard {
             layers: layer_line(print.current_layer, print.total_layer, total_layers),
             remaining: (busy && print.remaining_time_sec > 0)
                 .then(|| human_duration(print.remaining_time_sec)),
-            nozzle: Some(temperature(&status.extruder)),
+            finish: (busy && print.remaining_time_sec > 0)
+                .then(|| clock(jiff::Timestamp::now().as_second() + print.remaining_time_sec)),
+            nozzle: Some(temperature_view(&status.extruder)),
             nozzle_size,
             nozzle_note,
-            bed: Some(temperature(&status.heater_bed)),
+            bed: Some(temperature_view(&status.heater_bed)),
             trays,
             can_control: connected && (user.is_admin() || may_control),
             light: connected.then_some(status.led.status > 0),
@@ -260,14 +274,18 @@ pub fn safe_color(raw: &str) -> String {
     }
 }
 
-fn temperature(heater: &Heater) -> String {
-    if heater.target > 0.0 {
-        format!(
-            "{:.0} °C, target {:.0} °C",
-            heater.temperature, heater.target
-        )
-    } else {
-        format!("{:.0} °C", heater.temperature)
+fn temperature_view(heater: &Heater) -> Temperature {
+    let heating = heater.target > 0.0;
+    Temperature {
+        current: format!("{:.0}", heater.temperature),
+        target: heating.then(|| format!("{:.0}", heater.target)),
+        percent: if heating {
+            (heater.temperature / heater.target * 100.0).clamp(0.0, 100.0) as i64
+        } else {
+            0
+        },
+        // Firmware holds a heater within a degree or two of its target.
+        at_target: heating && (heater.temperature - heater.target).abs() <= 2.0,
     }
 }
 
@@ -282,10 +300,18 @@ pub fn human_duration(seconds: i64) -> String {
 }
 
 pub fn format_time(unix: i64) -> String {
+    local(unix, "%Y-%m-%d %H:%M")
+}
+
+fn clock(unix: i64) -> String {
+    local(unix, "%H:%M")
+}
+
+fn local(unix: i64, format: &str) -> String {
     jiff::Timestamp::from_second(unix)
         .map(|ts| {
             ts.to_zoned(jiff::tz::TimeZone::system())
-                .strftime("%Y-%m-%d %H:%M")
+                .strftime(format)
                 .to_string()
         })
         .unwrap_or_default()
@@ -333,6 +359,27 @@ mod tests {
         assert_eq!(human_duration(1), "1 min");
         assert_eq!(human_duration(3600), "1 h");
         assert_eq!(human_duration(5 * 3600 + 61), "5 h 2 min");
+    }
+
+    #[test]
+    fn heater_bars_fill_towards_the_target() {
+        let heater = |temperature, target| {
+            temperature_view(&Heater {
+                temperature,
+                target,
+            })
+        };
+        let warming = heater(105.0, 210.0);
+        assert_eq!((warming.percent, warming.at_target), (50, false));
+        let holding = heater(209.0, 210.0);
+        assert_eq!((holding.percent, holding.at_target), (99, true));
+        assert_eq!(
+            heater(215.0, 210.0).percent,
+            100,
+            "overshoot stays in the bar"
+        );
+        let off = heater(60.0, 0.0);
+        assert_eq!((off.target, off.at_target), (None, false));
     }
 
     #[test]

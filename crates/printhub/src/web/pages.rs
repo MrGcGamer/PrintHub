@@ -28,6 +28,10 @@ struct DashboardPage {
     camera_enabled: bool,
     /// Only for those allowed to record the nozzle.
     nozzle_choices: Option<Vec<NozzleChoice>>,
+    /// The front of the queue; `queue_total` counts every unfinished job.
+    rows: Vec<super::queue::JobRow>,
+    queue_total: usize,
+    compact: bool,
 }
 
 struct NozzleChoice {
@@ -61,11 +65,15 @@ pub async fn dashboard(
             })
             .collect()
     });
+    let (rows, queue_total) = super::queue::upcoming_rows(&state, &current.user, 5).await?;
     let page = DashboardPage {
         user: Some(current.user),
         card,
         camera_enabled: state.camera.is_some(),
         nozzle_choices,
+        rows,
+        queue_total,
+        compact: true,
     };
     Ok(render(&page)?.into_response())
 }

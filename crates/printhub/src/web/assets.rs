@@ -18,6 +18,11 @@ const ICON_192: &[u8] = include_bytes!("../../static/icon-192.png");
 const ICON_512: &[u8] = include_bytes!("../../static/icon-512.png");
 const ICON_MASKABLE_512: &[u8] = include_bytes!("../../static/icon-maskable-512.png");
 const MANIFEST: &[u8] = include_bytes!("../../static/manifest.webmanifest");
+const INSTRUMENT_SANS: &[u8] = include_bytes!("../../static/instrument-sans.woff2");
+const JETBRAINS_MONO: &[u8] = include_bytes!("../../static/jetbrains-mono.woff2");
+// The OFL requires every copy of the fonts to carry their licence.
+const INSTRUMENT_SANS_OFL: &[u8] = include_bytes!("../../static/OFL-instrument-sans.txt");
+const JETBRAINS_MONO_OFL: &[u8] = include_bytes!("../../static/OFL-jetbrains-mono.txt");
 
 pub async fn serve(Path(file): Path<String>) -> Result<Response, AppError> {
     let (body, content_type) = match file.as_str() {
@@ -31,6 +36,10 @@ pub async fn serve(Path(file): Path<String>) -> Result<Response, AppError> {
         "icon-512.png" => (ICON_512, "image/png"),
         "icon-maskable-512.png" => (ICON_MASKABLE_512, "image/png"),
         "manifest.webmanifest" => (MANIFEST, "application/manifest+json"),
+        "instrument-sans.woff2" => (INSTRUMENT_SANS, "font/woff2"),
+        "jetbrains-mono.woff2" => (JETBRAINS_MONO, "font/woff2"),
+        "OFL-instrument-sans.txt" => (INSTRUMENT_SANS_OFL, "text/plain; charset=utf-8"),
+        "OFL-jetbrains-mono.txt" => (JETBRAINS_MONO_OFL, "text/plain; charset=utf-8"),
         _ => return Err(AppError::NotFound),
     };
     Ok(cached(body, content_type))
