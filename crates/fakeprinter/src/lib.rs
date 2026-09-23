@@ -32,6 +32,11 @@ use serde_json::{Value, json};
 
 pub const USERNAME: &str = "elegoo";
 
+const AMBIENT: f64 = 25.0;
+const NOZZLE_TARGET: f64 = 210.0;
+const BED_TARGET: f64 = 60.0;
+const SIMULATED_LAYERS: u64 = 150;
+
 #[derive(Debug, Clone)]
 pub struct Options {
     pub serial: String,
@@ -75,6 +80,11 @@ struct PrinterState {
     /// Finished prints, newest last, as method 1036 reports them.
     history: Vec<Value>,
     led: i64,
+    /// `[temperature, target]`.
+    extruder: [f64; 2],
+    heater_bed: [f64; 2],
+    /// Seconds a simulated print has run, not counting pauses.
+    elapsed: u64,
     registration_reply: String,
     answer_pings: bool,
     requests_seen: Vec<u32>,
@@ -219,26 +229,24 @@ impl FakePrinter {
     /// As firmware 02.01.00.00 ends a print: plain idle, no completion sub-status, and the
     /// filename cleared. Only the task history records that it finished.
     pub fn complete_print(&self) {
-        {
-            let mut state = self.shared.state.lock().unwrap();
-            let finished = json!({
-                "task_id": state.uuid,
-                "task_name": state.filename,
-                "task_status": 1,
-                "begin_time": 0,
-                "end_time": state.task_counter,
-            });
-            state.history.push(finished);
-            state.status = 1;
-            state.sub_status = 0;
-            state.progress = 0;
-            state.filename = String::new();
-            state.uuid = String::new();
-        }
-        self.shared.push_delta(json!({
-            "machine_status": {"status": 1, "sub_status": 0, "progress": 0},
-            "print_status": {"filename": "", "uuid": "", "progress": 0, "state": "standby"},
-        }));
+        self.shared.complete_print();
+    }
+
+    /// Runs every started print to completion over `length`: progress, layer and remaining time
+    /// advance once a second (not while paused) and the heaters warm to typical PLA targets and
+    /// cool afterwards. For local development; the tests drive prints by hand.
+    pub fn simulate_prints(&self, length: Duration) {
+        let shared = Arc::clone(&self.shared);
+        let total = length.as_secs().max(1);
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(1));
+            loop {
+                tick.tick().await;
+                if shared.simulate_second(total) {
+                    shared.complete_print();
+                }
+            }
+        });
     }
 
     /// Publishes an arbitrary status delta, e.g. to exercise out-of-order sequences.
@@ -247,7 +255,28 @@ impl FakePrinter {
     }
 }
 
+/// One second of a heater moving a fifth of the way to its target, or back to ambient when off.
+fn approach(temperature: f64, target: f64) -> [f64; 2] {
+    let goal = if target > 0.0 { target } else { AMBIENT };
+    let next = temperature + (goal - temperature) * 0.2;
+    let next = if (goal - next).abs() < 0.5 {
+        goal
+    } else {
+        next
+    };
+    [(next * 10.0).round() / 10.0, target]
+}
+
 impl PrinterState {
+    /// Zero unless a print is being simulated.
+    fn layer(&self) -> u64 {
+        if self.status == 2 && self.elapsed > 0 {
+            (self.progress.clamp(0, 100) as u64 * SIMULATED_LAYERS / 100).max(1)
+        } else {
+            0
+        }
+    }
+
     fn new() -> Self {
         Self {
             status: 1,
@@ -269,6 +298,9 @@ impl PrinterState {
             started: Vec::new(),
             history: Vec::new(),
             led: 0,
+            extruder: [AMBIENT, 0.0],
+            heater_bed: [AMBIENT, 0.0],
+            elapsed: 0,
             registration_reply: "ok".into(),
             answer_pings: true,
             requests_seen: Vec::new(),
@@ -287,16 +319,16 @@ impl PrinterState {
             "print_status": {
                 "filename": self.filename,
                 "uuid": self.uuid,
-                "current_layer": 0,
-                "total_layer": 0,
-                "print_duration": 0,
-                "total_duration": 0,
+                "current_layer": self.layer(),
+                "total_layer": if self.layer() > 0 { SIMULATED_LAYERS } else { 0 },
+                "print_duration": self.elapsed,
+                "total_duration": self.elapsed,
                 "remaining_time_sec": 0,
                 "progress": self.progress,
                 "state": if self.status == 2 { "printing" } else { "standby" },
             },
-            "extruder": {"temperature": 25.0, "target": 0},
-            "heater_bed": {"temperature": 25.0, "target": 0},
+            "extruder": {"temperature": self.extruder[0], "target": self.extruder[1]},
+            "heater_bed": {"temperature": self.heater_bed[0], "target": self.heater_bed[1]},
             "external_device": {"camera": true, "u_disk": false, "type": "0303"},
             "led": {"status": self.led},
         })
@@ -304,6 +336,70 @@ impl PrinterState {
 }
 
 impl Shared {
+    fn complete_print(&self) {
+        {
+            let mut state = self.state.lock().unwrap();
+            let finished = json!({
+                "task_id": state.uuid,
+                "task_name": state.filename,
+                "task_status": 1,
+                "begin_time": 0,
+                "end_time": state.task_counter,
+            });
+            state.history.push(finished);
+            state.status = 1;
+            state.sub_status = 0;
+            state.progress = 0;
+            state.filename = String::new();
+            state.uuid = String::new();
+        }
+        self.push_delta(json!({
+            "machine_status": {"status": 1, "sub_status": 0, "progress": 0},
+            "print_status": {"filename": "", "uuid": "", "progress": 0, "state": "standby"},
+        }));
+    }
+
+    /// Returns whether the simulated print just reached its end.
+    fn simulate_second(&self, total: u64) -> bool {
+        let (delta, done) = {
+            let mut state = self.state.lock().unwrap();
+            let printing = state.status == 2;
+            let (nozzle, bed) = if printing {
+                (NOZZLE_TARGET, BED_TARGET)
+            } else {
+                (0.0, 0.0)
+            };
+            let heaters = (state.extruder, state.heater_bed);
+            state.extruder = approach(state.extruder[0], nozzle);
+            state.heater_bed = approach(state.heater_bed[0], bed);
+            let mut delta = json!({});
+            if heaters != (state.extruder, state.heater_bed) {
+                delta["extruder"] =
+                    json!({"temperature": state.extruder[0], "target": state.extruder[1]});
+                delta["heater_bed"] =
+                    json!({"temperature": state.heater_bed[0], "target": state.heater_bed[1]});
+            }
+            if printing && state.sub_status == 2075 {
+                state.elapsed += 1;
+                state.progress = i64::try_from(state.elapsed * 100 / total).unwrap_or(100);
+                delta["machine_status"] = json!({"progress": state.progress});
+                delta["print_status"] = json!({
+                    "progress": state.progress,
+                    "current_layer": state.layer(),
+                    "total_layer": SIMULATED_LAYERS,
+                    "print_duration": state.elapsed,
+                    "total_duration": state.elapsed,
+                    "remaining_time_sec": total.saturating_sub(state.elapsed),
+                });
+            }
+            (delta, printing && state.elapsed >= total)
+        };
+        if delta.as_object().is_some_and(|fields| !fields.is_empty()) {
+            self.push_delta(delta);
+        }
+        done
+    }
+
     fn topic(&self, suffix: &str) -> String {
         format!("elegoo/{}/{suffix}", self.serial)
     }
@@ -456,6 +552,7 @@ impl Shared {
                 state.status = 2;
                 state.sub_status = 2075;
                 state.progress = 0;
+                state.elapsed = 0;
                 state.filename = filename.clone();
                 state.uuid = format!("fake-task-{}", state.task_counter);
                 state.started.push(params.clone());
@@ -705,5 +802,40 @@ mod tests {
         TcpStream::connect(printer.mqtt_addr).unwrap();
         TcpStream::connect(printer.upload_addr).unwrap();
         TcpStream::connect(printer.camera_addr).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_simulated_print_heats_advances_pauses_and_finishes() {
+        let printer = FakePrinter::start(Options::default()).await.unwrap();
+        printer.add_file("a.gcode", b"G28");
+        let shared = &printer.shared;
+        let status = || shared.state.lock().unwrap().full_status();
+        assert!(!shared.simulate_second(4), "nothing to simulate while idle");
+        shared.execute(1020, &json!({"filename": "a.gcode"}));
+
+        assert!(!shared.simulate_second(4));
+        let running = status();
+        assert_eq!(running["machine_status"]["progress"], 25);
+        assert_eq!(running["extruder"]["target"], NOZZLE_TARGET);
+        assert!(running["extruder"]["temperature"].as_f64().unwrap() > AMBIENT);
+        assert_eq!(running["print_status"]["total_layer"], SIMULATED_LAYERS);
+
+        shared.execute(1021, &json!({}));
+        assert!(!shared.simulate_second(4));
+        assert_eq!(status()["machine_status"]["progress"], 25, "paused");
+        shared.execute(1023, &json!({}));
+
+        assert!(!shared.simulate_second(4));
+        assert!(!shared.simulate_second(4));
+        assert!(
+            shared.simulate_second(4),
+            "the fourth printing second ends it"
+        );
+        shared.complete_print();
+        let done = status();
+        assert_eq!(done["machine_status"]["status"], 1);
+        assert_eq!(done["print_status"]["current_layer"], 0);
+        assert!(!shared.simulate_second(4));
+        assert_eq!(status()["extruder"]["target"], 0.0, "the heaters turn off");
     }
 }

@@ -44,6 +44,8 @@ set -a && . ./.env && set +a
 - The real-slicer test is skipped unless `ORCA_SLICER` and `ORCA_PROFILES` are set.
 - Run against the emulator: `cargo run -p fakeprinter` prints the `PRINTER_*` variables; export
   them, then `cargo run -p printhub -- serve` (or `probe`, `slice-selftest`).
+  `FAKE_PRINT_SECONDS=120` makes every started print heat, advance and finish in that time
+  (also honoured by `./start-local.sh`); without it a print sits at 0% until a test drives it.
 
 Verification is a skill, not ad hoc: `.claude/skills/verify-phase` holds the full chain (fmt,
 clippy with `-D warnings`, sqlx prepare check, tests, offline build), `smoke.sh` for the real
