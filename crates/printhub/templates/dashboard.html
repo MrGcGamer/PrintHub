@@ -10,23 +10,21 @@
     <p class="muted">The camera is turned off.</p>
     {% endif %}
   </section>
-  <div class="status">
-    <div class="status" aria-live="polite" hx-ext="sse" sse-connect="/events/printer" sse-swap="printer">
-      {% include "printer_card.html" %}
-    </div>
-    <div class="nozzle-strip">
-      <p><strong>Mounted nozzle {{ card.nozzle_size }}</strong><br><span class="muted">{{ card.nozzle_note }}</span><a class="help" href="/wiki/printer/nozzle" aria-label="Help: mounted nozzle">?</a></p>
-      {% if let Some(choices) = nozzle_choices %}
-      <form method="post" action="/printer/nozzle" class="inline-form">
-        <label><span class="visually-hidden">Mounted nozzle</span>
-          <select name="nozzle">
-            {% for choice in choices %}<option value="{{ choice.value }}"{% if choice.selected %} selected{% endif %}>{{ choice.value }} mm</option>{% endfor %}
-          </select>
-        </label>
-        <button class="secondary">Record</button>
-      </form>
-      {% endif %}
-    </div>
+  <div class="status" aria-live="polite" hx-ext="sse" sse-connect="/events/printer" sse-swap="printer">
+    {% include "printer_card.html" %}
+  </div>
+  <div class="nozzle-strip">
+    <p><strong>Mounted nozzle {{ card.nozzle_size }}</strong><br><span class="muted">{{ card.nozzle_note }}</span><a class="help" href="/wiki/printer/nozzle" aria-label="Help: mounted nozzle">?</a></p>
+    {% if let Some(choices) = nozzle_choices %}
+    <form method="post" action="/printer/nozzle" class="inline-form">
+      <label><span class="visually-hidden">Mounted nozzle</span>
+        <select name="nozzle">
+          {% for choice in choices %}<option value="{{ choice.value }}"{% if choice.selected %} selected{% endif %}>{{ choice.value }} mm</option>{% endfor %}
+        </select>
+      </label>
+      <button class="secondary">Record</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 <div id="control-result" role="status"></div>
