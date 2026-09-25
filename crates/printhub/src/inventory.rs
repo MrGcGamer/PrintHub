@@ -175,6 +175,16 @@ pub async fn spools(db: &Db, include_archived: bool) -> Result<Vec<Spool>, Inven
     Ok(rows.into_iter().map(Spool::from).collect())
 }
 
+/// Every brand any spool, archived or not, has been given, once regardless of case.
+pub async fn brands(db: &Db) -> Result<Vec<String>, InventoryError> {
+    Ok(sqlx::query_scalar!(
+        "SELECT brand FROM spools WHERE brand <> ''
+         GROUP BY brand COLLATE NOCASE ORDER BY brand COLLATE NOCASE"
+    )
+    .fetch_all(db)
+    .await?)
+}
+
 pub async fn create_spool(
     db: &Db,
     fields: &SpoolFields,

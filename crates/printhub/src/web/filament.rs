@@ -310,6 +310,7 @@ struct SpoolFormPage {
     submit: &'static str,
     form: SpoolForm,
     owners: Vec<OwnerChoice>,
+    brands: Vec<String>,
     error: Option<String>,
 }
 
@@ -430,6 +431,7 @@ async fn form_page(
         },
         form,
         owners,
+        brands: inventory::brands(&state.db).await?,
         error,
     };
     Ok((status, render(&page)?).into_response())

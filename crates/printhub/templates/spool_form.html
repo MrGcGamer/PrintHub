@@ -11,11 +11,15 @@
     <input name="material" value="{{ form.material }}" list="materials" maxlength="64" autocomplete="off" required>
   </label>
   <datalist id="materials">
-    <option value="PLA"><option value="PETG"><option value="ABS"><option value="ASA"><option value="TPU"><option value="PLA-CF"><option value="PETG-CF">
+    <option value="PLA"><option value="PLA+"><option value="PLA-CF"><option value="PETG"><option value="PETG-CF"><option value="PETG-GF"><option value="PET-CF">
+    <option value="ABS"><option value="ASA"><option value="ASA-CF"><option value="PC"><option value="PA"><option value="PAHT-CF"><option value="TPU">
   </datalist>
   <label>Brand
-    <input name="brand" value="{{ form.brand }}" maxlength="64">
+    <input name="brand" value="{{ form.brand }}" list="brands" maxlength="64" autocomplete="off">
   </label>
+  <datalist id="brands">
+    {% for brand in brands %}<option value="{{ brand }}">{% endfor %}
+  </datalist>
   <label>Colour name
     <input name="color_name" value="{{ form.color_name }}" maxlength="64">
   </label>

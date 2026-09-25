@@ -1296,6 +1296,28 @@ async fn the_spool_list_shows_prices() {
 }
 
 #[tokio::test]
+async fn the_spool_form_suggests_brands_already_used() {
+    let app = app().await;
+    let admin = app.login("admin", ADMIN_PASSWORD).await;
+    app.add_spool(&admin, &spool_fields("PLA", "Blue", "#2850DF"))
+        .await;
+    let mut lowercase = spool_fields("PETG", "Red", "#DF2828");
+    lowercase[1].1 = "elegoo";
+    app.add_spool(&admin, &lowercase).await;
+    let page = app
+        .get("/spools/new", Some(&admin))
+        .await
+        .text()
+        .await
+        .unwrap();
+    let offered = page
+        .to_lowercase()
+        .matches(r#"<option value="elegoo">"#)
+        .count();
+    assert_eq!(offered, 1, "{page}");
+}
+
+#[tokio::test]
 async fn admins_cannot_be_made_members() {
     let app = app().await;
     let admin = app.login("admin", ADMIN_PASSWORD).await;

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT brand FROM spools WHERE brand <> ''\n         GROUP BY brand COLLATE NOCASE ORDER BY brand COLLATE NOCASE",
+  "describe": {
+    "columns": [
+      {
+        "name": "brand",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spools",
+            "name": "brand"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1573ed62e5b33d43bfe243585a4d01612d9c365a4ee2da6ad7e29cac4478dad6"
+}
