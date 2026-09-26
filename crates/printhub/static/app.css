@@ -189,10 +189,36 @@ a:hover { color: var(--accent); }
   border-bottom: 1px solid var(--line);
 }
 
-.bar nav { display: flex; align-items: center; gap: 1rem; min-width: 0; overflow-x: auto; }
+/* Below 64rem the nav is a popover under the Menu button, so tapping outside or Escape closes
+   it without script; wider, it is overridden back into the page as the sidebar. The UA gives
+   popovers display: none when closed, so display is only set once open. 4.5rem clears the bar:
+   its padding plus the 2.75rem button. */
+.bar nav {
+  inset: 4.5rem 0.75rem auto auto;
+  width: min(16rem, calc(100vw - 1.5rem));
+  max-height: calc(100vh - 5.25rem);
+  margin: 0;
+  padding: 0.9rem;
+  flex-direction: column;
+  gap: 1.4rem;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+}
+.bar nav:popover-open { display: flex; }
+.menu-toggle { justify-content: center; width: 2.75rem; padding: 0; }
 .bar form { margin: 0; }
-.nav-group { display: flex; align-items: center; gap: 0.15rem; }
-.nav-heading { display: none; }
+.nav-group { display: flex; flex-direction: column; }
+.nav-heading {
+  padding: 0 0.7rem 0.3rem;
+  font: 600 0.68rem var(--mono);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.nav-group.account { padding-top: 1rem; border-top: 1px solid var(--line); }
 .bar nav a, .bar nav button.link {
   display: block;
   min-height: 0;
@@ -202,6 +228,7 @@ a:hover { color: var(--accent); }
   text-decoration: none;
   white-space: nowrap;
 }
+.bar nav button.link { width: 100%; text-align: left; }
 .bar nav a:hover, .bar nav button.link:hover { color: var(--text); background: var(--bg); }
 .bar nav a[aria-current] { color: var(--text); font-weight: 600; background: color-mix(in srgb, var(--accent) 16%, transparent); }
 
@@ -220,18 +247,21 @@ a:hover { color: var(--accent); }
     border-right: 1px solid var(--line);
   }
   .bar .brand { padding: 0 0.5rem; }
-  .bar nav { flex: 1; flex-direction: column; align-items: stretch; gap: 1.4rem; overflow: visible; }
-  .nav-group { flex-direction: column; align-items: stretch; }
-  .nav-heading {
-    display: block;
-    padding: 0 0.7rem 0.3rem;
-    font: 600 0.68rem var(--mono);
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-    color: var(--muted);
+  .menu-toggle { display: none; }
+  .bar nav {
+    display: flex;
+    position: static;
+    flex: 1;
+    width: auto;
+    max-height: none;
+    padding: 0;
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
   }
-  .nav-group.account { margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--line); }
-  .bar nav button.link { width: 100%; text-align: left; }
+  .nav-group.account { margin-top: auto; }
   main { max-width: 80rem; }
 }
 .brand { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 700; text-decoration: none; color: var(--text); }

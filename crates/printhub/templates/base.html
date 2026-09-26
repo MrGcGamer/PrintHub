@@ -21,7 +21,8 @@
 {% if let Some(user) = user %}
 <header class="bar">
   <a href="/" class="brand">{% include "logo.html" %}Print<span class="hub">Hub</span></a>
-  <nav aria-label="Main">
+  <button class="secondary menu-toggle" popovertarget="main-nav" aria-label="Menu"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+  <nav aria-label="Main" id="main-nav" popover>
     <div class="nav-group">
       <a href="/"{% block nav_printer %}{% endblock %}>Printer</a>
       <a href="/jobs"{% block nav_queue %}{% endblock %}>Queue</a>
